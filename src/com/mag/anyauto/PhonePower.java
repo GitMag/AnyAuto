@@ -46,12 +46,14 @@ final class PhonePower {
     private final PowerManager pm;
     private final PowerManager.WakeLock lock;
     private boolean wanted; // the car shows AnyAuto
-    private boolean armed;  // we hold the phone awake and dark right now
+    private volatile boolean armed; // we hold the phone awake (and dark) right now
+    private volatile boolean dark;  // false: the keyboard is on the phone, so its screen stays on
     private boolean wokeIt; // the phone was asleep when we armed
     private Object idm;
     private Method requestDisplayPower;
 
-    PhonePower(Context shell, DisplayManager dm) {
+    PhonePower(Context shell, DisplayManager dm, boolean dark) {
+        this.dark = dark;
         thread.start();
         h = new Handler(thread.getLooper());
         this.dm = dm;
@@ -108,8 +110,29 @@ final class PhonePower {
         disarm();
     }
 
+    /**
+     * Dark (true, default) or with the phone's screen on (false: the keyboard setting "On the
+     * phone"). Once we have powered the panel off, Android does not show a keyboard on it again
+     * even after it is lit (its insets control never arrives; Android 17 emulator), so in that
+     * mode the panel is never powered off at all.
+     */
+    void setDark(boolean on) {
+        h.post(() -> {
+            if (dark == on) return;
+            dark = on;
+            if (!armed) return;
+            if (on) {
+                blank();
+            } else {
+                setPhonePower(Display.STATE_UNKNOWN);
+                h.postDelayed(checkRestored, 500);
+            }
+        });
+    }
+
     String describe() {
-        return wanted ? (armed ? "phone kept awake, screen off" : "phone asleep, car screen paused") : "phone untouched";
+        return wanted ? (armed ? (dark ? "phone kept awake, screen off" : "phone kept awake, screen on for the keyboard")
+                : "phone asleep, car screen paused") : "phone untouched";
     }
 
     // ------------------------------------------------------------------ power thread
@@ -184,6 +207,7 @@ final class PhonePower {
     }
 
     private void blank() {
+        if (!dark) return;
         Display d = dm.getDisplay(Display.DEFAULT_DISPLAY);
         if (d == null || d.getState() != Display.STATE_OFF) setPhonePower(Display.STATE_OFF);
     }

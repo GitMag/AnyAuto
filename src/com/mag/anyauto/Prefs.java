@@ -13,6 +13,8 @@ import java.util.Set;
 public final class Prefs {
     private static final String CAR_APPS = "car_apps";
     private static final String LAST = "last";
+    private static final String KEYBOARD_ON_CAR = "keyboard_on_car";
+    private static final String FULL_SCREEN = "full_screen";
 
     private Prefs() {
     }
@@ -72,5 +74,23 @@ public final class Prefs {
 
     public static void setLast(Context c, ComponentName cn) {
         p(c).edit().putString(LAST, cn.flattenToString()).apply();
+    }
+
+    /** Where the keyboard opens while the car shows an app: on the car screen (default) or the phone. */
+    public static boolean keyboardOnCar(Context c) {
+        return p(c).getBoolean(KEYBOARD_ON_CAR, true);
+    }
+
+    public static void setKeyboardOnCar(Context c, boolean onCar) {
+        p(c).edit().putBoolean(KEYBOARD_ON_CAR, onCar).apply();
+    }
+
+    /** The app also uses the band Android Auto keeps for Apps and Back (default on). */
+    public static boolean fullScreen(Context c) {
+        return p(c).getBoolean(FULL_SCREEN, true);
+    }
+
+    public static void setFullScreen(Context c, boolean on) {
+        p(c).edit().putBoolean(FULL_SCREEN, on).apply();
     }
 }

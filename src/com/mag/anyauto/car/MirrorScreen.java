@@ -6,6 +6,7 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.car.app.AppManager;
 import androidx.car.app.CarContext;
+import androidx.car.app.CarToast;
 import androidx.car.app.Screen;
 import androidx.car.app.SurfaceCallback;
 import androidx.car.app.SurfaceContainer;
@@ -53,6 +54,12 @@ final class MirrorScreen extends Screen implements SurfaceCallback {
         ActionStrip strip = new ActionStrip.Builder()
                 .addAction(new Action.Builder().setIcon(icon(R.drawable.ic_apps))
                         .setOnClickListener(() -> getScreenManager().push(new AppsScreen(getCarContext(), mirror)))
+                        .build())
+                .addAction(new Action.Builder().setIcon(icon(R.drawable.ic_keyboard))
+                        .setOnClickListener(() -> mirror.toggleKeyboard(r -> {
+                            String m = Mirror.keyboardMessage(r);
+                            if (m != null) CarToast.makeText(getCarContext(), m, CarToast.LENGTH_SHORT).show();
+                        }))
                         .build())
                 .addAction(new Action.Builder().setIcon(icon(R.drawable.ic_back))
                         .setOnClickListener(mirror::back)

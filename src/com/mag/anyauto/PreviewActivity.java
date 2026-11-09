@@ -22,6 +22,7 @@ import android.view.WindowInsetsController;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.Toast;
 import android.widget.TextView;
 
 /**
@@ -181,6 +182,12 @@ public final class PreviewActivity extends Activity implements SurfaceHolder.Cal
         LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(dp(72), dp(64));
         cp.topMargin = dp(8);
         rail.addView(card, cp);
+        LinearLayout.LayoutParams kp = new LinearLayout.LayoutParams(dp(72), dp(64));
+        kp.topMargin = dp(8);
+        rail.addView(railButton(R.drawable.ic_keyboard, "Keyboard", v -> mirror.toggleKeyboard(r -> {
+            String m = Mirror.keyboardMessage(r);
+            if (m != null) Toast.makeText(this, m, Toast.LENGTH_SHORT).show();
+        })), kp);
         rail.addView(new View(this), new LinearLayout.LayoutParams(1, 0, 1));
 
         // Back: filled accent, under the right thumb

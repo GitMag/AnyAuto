@@ -40,4 +40,15 @@ interface IDisplayService {
     // The car shows AnyAuto (true) or not (false): keep the phone awake with its own screen dark
     // while it does, because the display sleeps with the phone (PhonePower.java).
     oneway void keepRunning(boolean on) = 9;
+
+    // Where the keyboard opens: on the display itself (true, the car: nobody touches the dark
+    // phone) or on the phone's screen (false: the preview, where a finger on the phone moves the
+    // focus there and would close a keyboard on the display; or the car with the setting "On the
+    // phone", which also keeps the phone's screen on). Default true. Kept for new displays.
+    oneway void keyboardHere(boolean here) = 10;
+
+    // The keyboard button: hides an open keyboard (Back), or opens it for the focused text field
+    // (a tap on the field). Returns "shown", "hidden", "no field", "old android" (needs
+    // Android 11) or "error: ...".
+    String toggleKeyboard() = 11;
 }

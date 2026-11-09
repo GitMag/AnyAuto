@@ -89,6 +89,7 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
     private boolean pushedOn;
     private int pushedW, pushedH, pushedDpi;
     private boolean pushedKeep;
+    private Boolean pushedKeyboard;   // keyboard on the display (true) or on the phone (false)
     private int displayId = -1;
     private volatile ComponentName launched;
     private volatile Problem problem;
@@ -220,6 +221,40 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
         });
     }
 
+    /**
+     * The keyboard button (car action strip, preview rail). {@code done} gets the service's
+     * answer on the main thread; {@link #keyboardMessage} turns it into a short message.
+     */
+    public void toggleKeyboard(java.util.function.Consumer<String> done) {
+        io.post(() -> {
+            String[] r = {"error: no display"};
+            call(s -> r[0] = s.toggleKeyboard());
+            main.post(() -> done.accept(r[0]));
+        });
+    }
+
+    /** A short message for the keyboard button's answer, or null when the screen says enough. */
+    public static String keyboardMessage(String r) {
+        if (r == null) return null;
+        switch (r) {
+            case "shown":
+            case "hidden":
+                return null;
+            case "no field":
+                return "Tap a text field first";
+            case "old android":
+                return "The keyboard button needs Android 11 or newer";
+            default:
+                return "Keyboard: " + (r.startsWith("error: ") ? r.substring(7) : r);
+        }
+    }
+
+    /** A setting changed (keyboard, full screen): the car's Mirror applies it now. */
+    public static void settingsChanged() {
+        Mirror m = carShowing;
+        if (m != null) m.io.post(m::applyContent);
+    }
+
     public void back() {
         io.post(() -> call(s -> s.key(KeyEvent.KEYCODE_BACK)));
     }
@@ -320,7 +355,7 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
         Rect full = new Rect(0, 0, screenW, screenH);
         Rect r;
         if (forced != null && full.contains(forced) && !forced.isEmpty()) r = forced;
-        else if (!stable.isEmpty() && full.contains(stable)) r = stable;
+        else if (!stable.isEmpty() && full.contains(stable)) r = car && Prefs.fullScreen(context) ? fullScreen(stable) : stable;
         else if (!visible.isEmpty() && full.contains(visible)) r = visible;
         else r = full;
         if (r.isEmpty()) return;
@@ -331,6 +366,19 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
             touch.area(content.width(), content.height(), dpi, null);
         }
         sync();
+    }
+
+    /**
+     * The setting "Full screen in the car": the app also gets the band above the stable area that
+     * Android Auto keeps for Apps and Back; they float over the app while shown and hide by
+     * themselves. The gap at the top becomes the same as at the bottom, and it does not follow
+     * the buttons showing and hiding, so the app never jumps. Only for the full-width view: the
+     * dashboard and launcher cards have no such band.
+     */
+    private Rect fullScreen(Rect s) {
+        if (s.width() < screenW * 0.8f) return s;
+        int top = Math.max(0, screenH - s.bottom);
+        return top < s.top ? new Rect(s.left, top, s.right, s.bottom) : s;
     }
 
     private void sync() {
@@ -346,6 +394,7 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
             pushedTo = s;
             pushedOn = false;
             pushedKeep = false;
+            pushedKeyboard = null;
             displayId = -1;
             launched = null;
         }
@@ -367,7 +416,15 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
                     setProblem(new Problem("Can't make the car display", s.lastError()));
                     return;
                 }
+                pushedKeyboard = null; // a new display, or a new size: say it again
                 Log.i(TAG, s.info());
+            }
+            // the car: where the setting says; the preview: on the phone, since a finger on the
+            // phone takes the focus and would close a keyboard on the display (DisplayService)
+            Boolean keyboard = car && Prefs.keyboardOnCar(context);
+            if (!keyboard.equals(pushedKeyboard)) {
+                s.keyboardHere(keyboard);
+                pushedKeyboard = keyboard;
             }
             boolean keep = screen != null || hold;
             if (car && pushedKeep != keep) {

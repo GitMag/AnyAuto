@@ -30,14 +30,16 @@ public final class HelpActivity extends Activity {
         para(col, "1. Install Shizuku and start it (Wireless debugging, then Start). It has to be started again after every reboot.");
         para(col, "2. For a car, install AnyAuto with UnknownAuto: Android Auto only runs apps installed from Google Play. The desktop head unit doesn't check.");
         para(col, "3. Choose the apps for the car. Try shows an app at car size on this phone.");
-        para(col, "4. In the car, open AnyAuto and pick an app. Apps and Back are at the top of the car screen; Pan turns drags on.");
+        para(col, "4. In the car, open AnyAuto and pick an app. Apps, Keyboard and Back are at the top of the car screen; Pan turns drags on.");
 
         heading(col, "While an app is on the car screen");
         para(col, "The phone stays awake with its screen off. The power button still puts it to sleep; the car screen pauses until you tap it. When Android Auto stops showing AnyAuto, the phone goes back to how it was.");
+        para(col, "Tap a text field and the keyboard opens on the car screen. The Keyboard button opens it for the selected text field, or closes it. To type on the phone instead, choose ⋮ → Keyboard → On the phone; the phone's screen then stays on.");
+        para(col, "The app uses the whole car screen, and Apps, Keyboard and Back float over its top corner until they hide. To keep them out of the app's way, turn off ⋮ → Full screen in the car.");
 
         heading(col, "Limits");
         para(col, "Apps that protect their windows (banking, DRM video, incognito tabs) show black.");
-        para(col, "The keyboard opens on the phone, not on the car screen.");
+        para(col, "The Keyboard button needs Android 11 or newer.");
         para(col, "Apps on the car screen skip the phone's lock.");
         para(col, "There is one car display, so Try is unavailable while AnyAuto is on the car screen.");
 

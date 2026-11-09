@@ -37,7 +37,7 @@ import java.util.List;
 public final class MainActivity extends Activity implements Shell.Listener {
     static final String UNKNOWNAUTO = "com.mag.unknownauto";
     static final String UNKNOWNAUTO_RELEASES = "https://github.com/GitMag/UnknownAuto/releases/latest";
-    private static final int MENU_HELP = 1, MENU_INSTALL = 2;
+    private static final int MENU_HELP = 1, MENU_INSTALL = 2, MENU_KEYBOARD = 3, MENU_FULL = 4;
 
     private LinearLayout cards;
     private TextView section, sectionCount;
@@ -139,13 +139,36 @@ public final class MainActivity extends Activity implements Shell.Listener {
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        menu.add(0, MENU_HELP, 0, "Help");
-        menu.add(0, MENU_INSTALL, 1, "Install for the car");
+        menu.add(0, MENU_FULL, 0, "Full screen in the car").setCheckable(true)
+                .setChecked(Prefs.fullScreen(this));
+        menu.add(0, MENU_KEYBOARD, 1, "Keyboard");
+        menu.add(0, MENU_HELP, 2, "Help");
+        menu.add(0, MENU_INSTALL, 3, "Install for the car");
         return true;
     }
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == MENU_FULL) {
+            boolean on = !item.isChecked();
+            item.setChecked(on);
+            Prefs.setFullScreen(this, on);
+            Mirror.settingsChanged();
+            return true;
+        }
+        if (item.getItemId() == MENU_KEYBOARD) {
+            String[] choices = {"On the car screen", "On the phone (its screen then stays on while AnyAuto is on the car screen)"};
+            new AlertDialog.Builder(this)
+                    .setTitle("Where the keyboard opens")
+                    .setSingleChoiceItems(choices, Prefs.keyboardOnCar(this) ? 0 : 1, (d, which) -> {
+                        Prefs.setKeyboardOnCar(this, which == 0);
+                        Mirror.settingsChanged();
+                        d.dismiss();
+                    })
+                    .setNegativeButton("Close", null)
+                    .show();
+            return true;
+        }
         if (item.getItemId() == MENU_HELP) {
             startActivity(new Intent(this, HelpActivity.class));
             return true;

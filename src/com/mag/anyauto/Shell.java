@@ -24,7 +24,7 @@ public final class Shell {
     static final String SHIZUKU_PACKAGE = "moe.shizuku.privileged.api";
     private static final int REQUEST = 4100;
     // bump whenever DisplayService changes, so Shizuku starts the new code instead of a running copy
-    private static final int SERVICE_VERSION = 6;
+    private static final int SERVICE_VERSION = 10;
 
     enum State { NO_SHIZUKU, NOT_RUNNING, OLD_SHIZUKU, NO_PERMISSION, CONNECTING, READY }
 

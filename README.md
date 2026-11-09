@@ -83,12 +83,21 @@ stopped or not allowed, or AnyAuto not installed for the car.
 **On the phone:** **Try** next to a chosen app opens it at car size on the phone. It is a
 landscape preview with the same display and gesture handling as the car. The rail on the right
 has **Close**, **Direct** (raw touches instead of car gestures), **Card** (the size of the
-dashboard card) and **Back**. **Help** is in the ⋮ menu.
+dashboard card), **Keyboard** and **Back**. The ⋮ menu has the settings and **Help**.
 
 **In the car:** open AnyAuto and pick an app from the grid. The app you have open is marked
-**Open**. The strip at the top has **Apps** (back to the grid) and **Back** (the app's own Back).
-For drags, turn on the pan button in the map strip. AnyAuto also works on the Android Auto
-dashboard: the app is drawn into the dashboard card.
+**Open**. The buttons at the top are **Apps** (back to the grid), **Keyboard** and **Back** (the
+app's own Back). For drags, turn on the pan button in the map strip. AnyAuto also works on the
+Android Auto dashboard: the app is drawn into the dashboard card.
+
+**Full screen:** the app uses the whole car screen, and the buttons float over its top corner
+until they hide by themselves. To keep them out of the app's way, turn off ⋮ → **Full screen in
+the car**; the app then starts below them.
+
+**Typing:** tap a text field and the keyboard opens on the car screen. The **Keyboard** button
+opens it for the selected text field, or closes it (it says so when no text field is selected).
+To type on the phone instead, choose ⋮ → **Keyboard** → **On the phone**: the phone's screen
+then stays on while AnyAuto is on the car screen. The Keyboard button needs Android 11 or newer.
 
 AnyAuto is listed as a navigation app because that is the only Android Auto category that
 gets the whole car screen to draw on. It never starts navigation, so Google Maps keeps
@@ -107,7 +116,6 @@ directions and "navigate to" requests.
 - **Some windows show black.** Apps that protect their windows show black on the car screen.
   Examples are banking apps, DRM video (Netflix and other streaming services) and Chrome
   incognito tabs. Non-DRM video, such as YouTube, works.
-- **The keyboard opens on the phone,** not on the car screen.
 - **One car display:** **Try** is unavailable while AnyAuto is on the car screen.
 
 **Drive safely.** AnyAuto doesn't lock anything while the car is moving. Use video and other
@@ -141,6 +149,11 @@ Android Auto (car screen)                AnyAuto app process              Shizuk
   surface: the dashboard or launcher card, or everything below the action strip. The display
   draws into a texture, and OpenGL draws each frame into the car's stable area. The rest stays
   black. The display is resized to that area, and car coordinates are shifted to match.
+- **Keyboard on the car screen:** Android opens a virtual display's keyboard on the phone by
+  default. AnyAuto sets the display's keyboard policy to *local*
+  (`IWindowManager.setDisplayImePolicy`), like scrcpy's `--display-ime-policy local`. The
+  Keyboard button reads the keyboard state through accessibility, connected only for that
+  moment, then sends Back or taps the selected text field.
 - **Dark phone (`PhonePower`):** a virtual display sleeps with its display group. On Android 17
   builds that support desktop mode, every virtual display is put in the phone's group. So
   AnyAuto holds a wake lock and powers off only the phone's own panel

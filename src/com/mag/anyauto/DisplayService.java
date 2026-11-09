@@ -1,7 +1,9 @@
 package com.mag.anyauto;
 
+import android.accessibilityservice.AccessibilityServiceInfo;
 import android.app.ActivityManager;
 import android.app.ActivityOptions;
+import android.app.UiAutomation;
 import android.content.AttributionSource;
 import android.content.ComponentName;
 import android.content.Context;
@@ -10,6 +12,7 @@ import android.content.Intent;
 import android.hardware.display.DisplayManager;
 import android.graphics.Bitmap;
 import android.graphics.PixelFormat;
+import android.graphics.Rect;
 import android.hardware.display.VirtualDisplay;
 import android.media.Image;
 import android.media.ImageReader;
@@ -17,21 +20,27 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Looper;
 import android.os.Process;
 import android.os.SystemClock;
 import android.util.Log;
+import android.util.SparseArray;
+import android.view.Display;
 import android.view.InputDevice;
 import android.view.InputEvent;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.Surface;
+import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityWindowInfo;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.List;
 
 /**
  * Runs in the Shizuku-spawned process with the <b>shell</b> user's rights (uid 2000), the same
@@ -71,7 +80,9 @@ public final class DisplayService extends IDisplayService.Stub {
     private Surface surface;
     private int width, height, dpi, flags;
     private volatile String lastError = "";
-    private PhonePower phone;
+    private volatile PhonePower phone;
+    // the car's (and the headless car's) default; the preview asks for the phone's screen
+    private boolean keyboardHere = true;
 
     // the headless car for tests: an ImageReader instead of the car's surface
     private static final File HEADLESS_PNG = new File("/data/local/tmp/anyauto-headless.png");
@@ -109,6 +120,7 @@ public final class DisplayService extends IDisplayService.Stub {
                 display = create(w, h, d, s);
                 displayId = display.getDisplay().getDisplayId();
                 Log.i(TAG, "display " + displayId + " " + w + "x" + h + "@" + d + " flags 0x" + Integer.toHexString(flags));
+                applyKeyboard();
             } else {
                 display.setSurface(s);
                 if (w > 0 && h > 0 && d > 0 && (w != width || h != height || d != dpi)) {
@@ -162,6 +174,191 @@ public final class DisplayService extends IDisplayService.Stub {
         throw last != null ? last : new IllegalStateException("createVirtualDisplay returned null");
     }
 
+    @Override
+    public synchronized void keyboardHere(boolean here) {
+        if (keyboardHere == here) return;
+        keyboardHere = here;
+        if (display != null) applyKeyboard();
+        // a keyboard on the phone needs the phone's screen on (PhonePower.setDark)
+        if (phone != null) phone.setDark(here);
+    }
+
+    /**
+     * Where the display's keyboard opens (IME policy, like scrcpy's {@code --display-ime-policy}):
+     * LOCAL puts it on the display itself; FALLBACK_DISPLAY (Android's default for a virtual
+     * display) on the phone's screen, which is dark while the car uses the display. A keyboard on
+     * the display only stays open while that display has the focus, and a finger on the phone's
+     * screen takes the focus, so the preview keeps the keyboard on the phone. Needs a trusted
+     * display and INTERNAL_SYSTEM_WINDOW (the shell user has it). Best effort: if it is refused,
+     * the display still works and the keyboard stays on the phone.
+     */
+    private void applyKeyboard() {
+        int id = displayId;
+        boolean here = keyboardHere;
+        if ((flags & TRUSTED) == 0) {
+            if (here) Log.i(TAG, "display not trusted: the keyboard stays on the phone");
+            return;
+        }
+        try {
+            // straight from ServiceManager: WindowManagerGlobal.getWindowManagerService() needs
+            // ApplicationSharedMemory on Android 17, which this process never sets up
+            Object binder = Class.forName("android.os.ServiceManager")
+                    .getMethod("getService", String.class).invoke(null, Context.WINDOW_SERVICE);
+            Object wm = Class.forName("android.view.IWindowManager$Stub")
+                    .getMethod("asInterface", android.os.IBinder.class).invoke(null, binder);
+            if (Build.VERSION.SDK_INT >= 31) {
+                // WindowManager.DISPLAY_IME_POLICY_LOCAL = 0, DISPLAY_IME_POLICY_FALLBACK_DISPLAY = 1
+                wm.getClass().getMethod("setDisplayImePolicy", int.class, int.class)
+                        .invoke(wm, id, here ? 0 : 1);
+            } else {
+                wm.getClass().getMethod("setShouldShowIme", int.class, boolean.class).invoke(wm, id, here);
+            }
+            Log.i(TAG, "keyboard for display " + id + " opens " + (here ? "on it" : "on the phone"));
+        } catch (Throwable t) {
+            // not lastError: that one explains failures, and the display itself is fine
+            Log.w(TAG, "keyboard stays on the phone: " + describe(t), t);
+        }
+    }
+
+    // ------------------------------------------------------------------ the keyboard button
+
+    private final Object a11yLock = new Object();
+    private HandlerThread a11yThread;
+
+    /**
+     * Reads the keyboard state through accessibility (a UiAutomation, like {@code uiautomator}
+     * uses; the shell user may connect one), connected only for this press so accessibility is not
+     * left on while driving. Then: keyboard open (on the display, or on the phone with the setting
+     * "On the phone") → Back closes it; a focused text field → a tap on it opens the keyboard, the
+     * same as a finger would.
+     */
+    @Override
+    public String toggleKeyboard() {
+        int id;
+        boolean here;
+        synchronized (this) {
+            id = displayId;
+            here = keyboardHere;
+        }
+        if (id < 0) return "error: no display";
+        if (Build.VERSION.SDK_INT < 30) return "old android"; // getWindowsOnAllDisplays
+        synchronized (a11yLock) {
+            UiAutomation ua = null;
+            try {
+                ua = connectA11y();
+                Object[] state = keyboardState(ua, id, here);
+                AccessibilityNodeInfo field = (AccessibilityNodeInfo) state[1];
+                if ((Boolean) state[0]) {
+                    key(KeyEvent.KEYCODE_BACK);
+                    return "hidden";
+                }
+                if (field == null) return "no field";
+                Rect r = new Rect();
+                field.getBoundsInScreen(r);
+                tap(id, r.centerX(), r.centerY());
+                return "shown";
+            } catch (Throwable t) {
+                Log.w(TAG, "keyboard button: " + describe(t), t);
+                return "error: " + describe(t);
+            } finally {
+                disconnectA11y(ua);
+            }
+        }
+    }
+
+    /** {keyboard open (Boolean), focused text field or null}. */
+    private static Object[] keyboardState(UiAutomation ua, int id, boolean here) {
+        boolean shown = false;
+        AccessibilityNodeInfo field = null;
+        // web pages build their accessibility tree on demand: look again briefly
+        for (int i = 0; i < 4 && !shown && field == null; i++) {
+            if (i > 0) SystemClock.sleep(200);
+            SparseArray<List<AccessibilityWindowInfo>> all = ua.getWindowsOnAllDisplays();
+            shown = hasKeyboard(all.get(id)) || (!here && hasKeyboard(all.get(Display.DEFAULT_DISPLAY)));
+            if (!shown) field = focusedField(all.get(id));
+        }
+        return new Object[]{shown, field};
+    }
+
+    private static boolean hasKeyboard(List<AccessibilityWindowInfo> windows) {
+        if (windows == null) return false;
+        for (AccessibilityWindowInfo w : windows) {
+            if (w.getType() == AccessibilityWindowInfo.TYPE_INPUT_METHOD) return true;
+        }
+        return false;
+    }
+
+    /** The text field with the input focus in the display's windows, top window first. */
+    private static AccessibilityNodeInfo focusedField(List<AccessibilityWindowInfo> windows) {
+        if (windows == null) return null;
+        for (AccessibilityWindowInfo w : windows) {
+            AccessibilityNodeInfo root = w.getRoot();
+            if (root == null) continue;
+            AccessibilityNodeInfo f = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
+            if (f != null && f.isEditable()) return f;
+        }
+        return null;
+    }
+
+    private UiAutomation connectA11y() throws Exception {
+        if (a11yThread == null) {
+            a11yThread = new HandlerThread("anyauto-a11y");
+            a11yThread.start();
+        }
+        Class<?> iconn = Class.forName("android.app.IUiAutomationConnection");
+        Object conn = Class.forName("android.app.UiAutomationConnection").getDeclaredConstructor().newInstance();
+        UiAutomation ua;
+        try {
+            // (Looper, connection): Android 7 to 17, on our own thread
+            Constructor<UiAutomation> k = UiAutomation.class.getDeclaredConstructor(Looper.class, iconn);
+            k.setAccessible(true);
+            ua = k.newInstance(a11yThread.getLooper(), conn);
+        } catch (NoSuchMethodException e) {
+            Constructor<UiAutomation> k = UiAutomation.class.getDeclaredConstructor(Context.class, iconn);
+            k.setAccessible(true);
+            ua = k.newInstance(context, conn);
+        }
+        Method connect = UiAutomation.class.getDeclaredMethod("connect", int.class);
+        connect.setAccessible(true);
+        connect.invoke(ua, UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES);
+        AccessibilityServiceInfo info = ua.getServiceInfo();
+        info.flags |= AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+                | AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS;
+        ua.setServiceInfo(info);
+        return ua;
+    }
+
+    private static void disconnectA11y(UiAutomation ua) {
+        if (ua == null) return;
+        try {
+            Method m = UiAutomation.class.getDeclaredMethod("disconnect");
+            m.setAccessible(true);
+            m.invoke(ua);
+        } catch (Throwable t) {
+            Log.w(TAG, "accessibility disconnect: " + describe(t));
+        }
+    }
+
+    /** A finger tap at display pixels (x, y). */
+    private void tap(int id, int x, int y) {
+        MotionEvent.PointerProperties[] props = {new MotionEvent.PointerProperties()};
+        props[0].id = 0;
+        props[0].toolType = MotionEvent.TOOL_TYPE_FINGER;
+        MotionEvent.PointerCoords[] coords = {new MotionEvent.PointerCoords()};
+        coords[0].x = Math.max(0, Math.min(width - 1, x));
+        coords[0].y = Math.max(0, Math.min(height - 1, y));
+        coords[0].pressure = 1f;
+        coords[0].size = 1f;
+        long down = SystemClock.uptimeMillis();
+        for (int action : new int[]{MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP}) {
+            MotionEvent e = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, 1, props, coords,
+                    0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0);
+            inject(e, id);
+            e.recycle();
+            if (action == MotionEvent.ACTION_DOWN) SystemClock.sleep(60);
+        }
+    }
+
     /** DisplayManager(Context) is hidden; the shell context makes its calls come from com.android.shell. */
     private synchronized DisplayManager dm() throws Exception {
         if (dm == null) {
@@ -178,7 +375,7 @@ public final class DisplayService extends IDisplayService.Stub {
             synchronized (this) {
                 if (phone == null) {
                     if (!on) return;
-                    phone = new PhonePower(context, dm());
+                    phone = new PhonePower(context, dm(), keyboardHere);
                 }
             }
             phone.keep(on);
