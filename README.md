@@ -160,6 +160,11 @@ thanks, you can [buy me a coffee on Ko‑fi](https://ko-fi.com/forsblomdev).
 
 ## License
 
-[PolyForm Noncommercial 1.0.0](LICENSE.md): you may use, change and share AnyAuto for any
-noncommercial purpose. Commercial use is not allowed. The libraries built into the APK keep their
-own licenses: AndroidX and the Car App Library (Apache-2.0), and the Shizuku API (Apache-2.0).
+Copyright (C) 2026 GitMag
+
+AnyAuto is free software: you can use, study, share and change it under the terms of the
+[GNU General Public License, version 3](LICENSE). If you distribute AnyAuto or a modified
+version of it, you must make its source code available under the same license.
+
+The libraries built into the APK keep their own licenses: AndroidX and the Car App Library
+(Apache-2.0), and the Shizuku API (Apache-2.0).
