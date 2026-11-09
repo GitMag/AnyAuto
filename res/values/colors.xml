@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Flat fallback for the launcher background. The adaptive icon uses drawable/ic_launcher_bg
+         (a blue gradient); point ic_launcher.xml at this colour instead for a flat icon. -->
+    <color name="ic_launcher_bg">#2E74F2</color>
+</resources>

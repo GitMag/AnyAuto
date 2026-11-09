@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AnyAuto launcher icon: the central 72 dp of the adaptive icon (res/drawable/ic_launcher_bg,
+     ic_launcher_fg) on a rounded square. Same path data as the Android vectors, shifted by -18. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3D8BFF"/>
+      <stop offset="1" stop-color="#1F5CE6"/>
+    </linearGradient>
+    <clipPath id="mask"><rect width="72" height="72" rx="16"/></clipPath>
+  </defs>
+  <g clip-path="url(#mask)">
+    <rect width="72" height="72" fill="url(#bg)"/>
+    <g transform="translate(-18,-18)">
+      <!-- car screen, with a gap cut out where the phone sits in front of it -->
+      <path fill="#FFFFFF" fill-rule="evenodd"
+            d="M39.75,31 h36.5 a4.75,4.75 0 0 1 4.75,4.75 v20 a4.75,4.75 0 0 1 -4.75,4.75 h-41.25 v-24.75 a4.75,4.75 0 0 1 4.75,-4.75 z M35,42.5 h4.25 a7.75,7.75 0 0 1 7.75,7.75 v10.25 h-12 z"/>
+      <!-- the phone's app, on the car screen -->
+      <path fill="#FF7A3C"
+            d="M56,37 h16 a3,3 0 0 1 3,3 v11.5 a3,3 0 0 1 -3,3 h-16 a3,3 0 0 1 -3,-3 v-11.5 a3,3 0 0 1 3,-3 z"/>
+      <!-- the phone -->
+      <path fill="#FF7A3C"
+            d="M31.75,45.5 h7.5 a4.75,4.75 0 0 1 4.75,4.75 v22 a4.75,4.75 0 0 1 -4.75,4.75 h-7.5 a4.75,4.75 0 0 1 -4.75,-4.75 v-22 a4.75,4.75 0 0 1 4.75,-4.75 z"/>
+    </g>
+  </g>
+</svg>

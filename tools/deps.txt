@@ -1,0 +1,10 @@
+# App dependencies: one group:artifact:version per line (version omitted = latest stable).
+# Resolved by tools/fetch-deps.py into libs/ (./build.sh re-resolves when this file changes).
+# Only android-35 is installed, so every AAR must have minCompileSdk <= 35.
+
+# Android for Cars App Library: the car-side templates and the NavigationTemplate surface
+androidx.car.app:app:1.7.0
+
+# Shizuku client: binds DisplayService into a process with the shell user's rights
+dev.rikka.shizuku:api:13.1.5
+dev.rikka.shizuku:provider:13.1.5

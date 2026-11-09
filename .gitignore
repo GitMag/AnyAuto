@@ -1,0 +1,16 @@
+# build output (recreated by build.sh)
+build/
+*.apk
+*.apk.idsig
+*.idsig
+
+# fetched libraries and the manifest merger (build.sh re-downloads them)
+libs/
+tools/merger/
+
+# signing key: generated locally by build.sh, never commit
+keys/
+*.keystore
+*.jks
+
+.DS_Store
