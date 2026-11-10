@@ -146,7 +146,7 @@ final class PhonePower {
         wokeIt = !pm.isInteractive();
         lock.acquire();
         armed = true;
-        Log.i(TAG, "phone kept awake with its screen off" + (wokeIt ? " (woken for the car)" : ""));
+        Log.i(TAG, "phone kept awake with its screen " + (dark ? "off" : "on") + (wokeIt ? " (woken for the car)" : ""));
         blank();
         h.removeCallbacks(watch);
         h.postDelayed(watch, WATCH_MS);

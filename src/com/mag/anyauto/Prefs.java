@@ -15,6 +15,7 @@ public final class Prefs {
     private static final String LAST = "last";
     private static final String KEYBOARD_ON_CAR = "keyboard_on_car";
     private static final String FULL_SCREEN = "full_screen";
+    private static final String KEEP_PHONE_ON = "keep_phone_on";
 
     private Prefs() {
     }
@@ -92,5 +93,14 @@ public final class Prefs {
 
     public static void setFullScreen(Context c, boolean on) {
         p(c).edit().putBoolean(FULL_SCREEN, on).apply();
+    }
+
+    /** The phone stays awake with its screen on while the car shows AnyAuto (default off). */
+    public static boolean keepPhoneOn(Context c) {
+        return p(c).getBoolean(KEEP_PHONE_ON, false);
+    }
+
+    public static void setKeepPhoneOn(Context c, boolean on) {
+        p(c).edit().putBoolean(KEEP_PHONE_ON, on).apply();
     }
 }

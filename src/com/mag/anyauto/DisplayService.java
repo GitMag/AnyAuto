@@ -21,6 +21,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.os.Process;
 import android.os.SystemClock;
 import android.util.Log;
@@ -83,6 +84,15 @@ public final class DisplayService extends IDisplayService.Stub {
     private volatile PhonePower phone;
     // the car's (and the headless car's) default; the preview asks for the phone's screen
     private boolean keyboardHere = true;
+    // the setting "Keep the phone's screen on"
+    private boolean keepPhoneOn;
+    // the car shows AnyAuto (keepRunning)
+    private boolean carOn;
+    // the display has a display group of its own, so it keeps running while the phone sleeps
+    // (Android 14 emulator: group 1); on Android 17 builds it shares the phone's group 0
+    private boolean ownGroup;
+    // keeps only the car display's group awake (PowerManager.newWakeLock(..., displayId))
+    private PowerManager.WakeLock carLock;
 
     // the headless car for tests: an ImageReader instead of the car's surface
     private static final File HEADLESS_PNG = new File("/data/local/tmp/anyauto-headless.png");
@@ -122,6 +132,11 @@ public final class DisplayService extends IDisplayService.Stub {
                 Log.i(TAG, "display " + displayId + " " + w + "x" + h + "@" + d + " flags 0x" + Integer.toHexString(flags));
                 keepLandscape();
                 applyKeyboard();
+                ownGroup = ownGroup(displayId);
+                Log.i(TAG, "display " + displayId + (ownGroup
+                        ? " has its own display group: the phone is left alone"
+                        : " is in the phone's display group: the phone is kept awake while the car shows it"));
+                applyPhoneMode();
             } else {
                 display.setSurface(s);
                 if (w > 0 && h > 0 && d > 0 && (w != width || h != height || d != dpi)) {
@@ -180,8 +195,15 @@ public final class DisplayService extends IDisplayService.Stub {
         if (keyboardHere == here) return;
         keyboardHere = here;
         if (display != null) applyKeyboard();
-        // a keyboard on the phone needs the phone's screen on (PhonePower.setDark)
-        if (phone != null) phone.setDark(here);
+        // a keyboard on the phone needs the phone's screen on
+        applyPhoneMode();
+    }
+
+    @Override
+    public synchronized void phoneScreenOn(boolean on) {
+        if (keepPhoneOn == on) return;
+        keepPhoneOn = on;
+        applyPhoneMode();
     }
 
     /**
@@ -428,18 +450,78 @@ public final class DisplayService extends IDisplayService.Stub {
     }
 
     @Override
-    public void keepRunning(boolean on) {
+    public synchronized void keepRunning(boolean on) {
+        carOn = on;
+        applyPhoneMode();
+    }
+
+    /**
+     * What happens to the phone while the car shows AnyAuto:
+     * <ul>
+     * <li>the display has its own display group (it runs while the phone sleeps): the phone is
+     *     left alone, it sleeps, locks and can be used as usual; a wake lock for the car display
+     *     alone keeps that one awake;</li>
+     * <li>it shares the phone's group (Android 17 builds with desktop mode): the phone must stay
+     *     awake, so {@link PhonePower} keeps it awake with its screen dark;</li>
+     * <li>"Keep the phone's screen on", or the keyboard on the phone: the phone stays awake with
+     *     its screen on, in both cases.</li>
+     * </ul>
+     */
+    private synchronized void applyPhoneMode() {
         try {
-            synchronized (this) {
+            boolean lit = keepPhoneOn || !keyboardHere;
+            if (ownGroup && !lit) {
+                if (phone != null) phone.releaseNow();
+            } else {
                 if (phone == null) {
-                    if (!on) return;
-                    phone = new PhonePower(context, dm(), keyboardHere);
+                    if (!carOn) return;
+                    phone = new PhonePower(context, dm(), !lit);
                 }
+                phone.setDark(!lit);
+                phone.keep(carOn);
             }
-            phone.keep(on);
+            carLock(carOn && ownGroup);
         } catch (Throwable t) {
             lastError = "phone power: " + describe(t);
             Log.w(TAG, lastError, t);
+        }
+    }
+
+    /** A screen wake lock for the car display's group only (hidden API, Android 13+); best effort. */
+    private void carLock(boolean on) {
+        try {
+            if (on && carLock == null) {
+                PowerManager pm = context.createPackageContext(SHELL, 0).getSystemService(PowerManager.class);
+                Method m = PowerManager.class.getMethod("newWakeLock", int.class, String.class, int.class);
+                carLock = (PowerManager.WakeLock) m.invoke(pm,
+                        PowerManager.SCREEN_DIM_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, "AnyAuto:car-display", displayId);
+                carLock.setReferenceCounted(false);
+            }
+            if (carLock == null) return;
+            if (on && !carLock.isHeld()) {
+                carLock.acquire();
+                Log.i(TAG, "car display kept awake on its own; the phone is untouched");
+            } else if (!on && carLock.isHeld()) {
+                carLock.release();
+            }
+        } catch (Throwable t) {
+            Log.i(TAG, "no wake lock for the car display alone: " + describe(t));
+        }
+    }
+
+    /** True when the display's group is not the phone's (DisplayInfo.displayGroupId, Android 12+). */
+    private static boolean ownGroup(int id) {
+        if (Build.VERSION.SDK_INT < 31) return false;
+        try {
+            Object g = Class.forName("android.hardware.display.DisplayManagerGlobal").getMethod("getInstance").invoke(null);
+            Method info = g.getClass().getMethod("getDisplayInfo", int.class);
+            Object car = info.invoke(g, id), phone = info.invoke(g, Display.DEFAULT_DISPLAY);
+            if (car == null || phone == null) return false;
+            java.lang.reflect.Field f = car.getClass().getField("displayGroupId");
+            return f.getInt(car) != f.getInt(phone);
+        } catch (Throwable t) {
+            Log.i(TAG, "display group unknown: " + describe(t));
+            return false;
         }
     }
 
@@ -528,6 +610,7 @@ public final class DisplayService extends IDisplayService.Stub {
     @Override
     public synchronized void close() {
         if (phone != null) phone.releaseNow();
+        if (carLock != null && carLock.isHeld()) carLock.release();
         if (display != null) {
             Log.i(TAG, "display " + displayId + " released");
             display.release();

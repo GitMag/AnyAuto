@@ -106,12 +106,16 @@ directions and "navigate to" requests.
 
 ## While an app is on the car screen
 
-- **The phone stays awake with its screen off.** The car display can only run while the phone
-  is awake, so AnyAuto keeps the phone awake and turns its panel off. The power button still
-  puts the phone to sleep, and the car screen then pauses until you tap it. When Android Auto
-  stops showing AnyAuto, the phone goes back to how it was (asleep if AnyAuto woke it). If you
-  move between the grid, the app and other car screens, AnyAuto waits 8 seconds before it lets
-  go, so the phone doesn't keep lighting up.
+- **The phone.** On many phones (Android 14, for example) the car screen runs on its own, and
+  AnyAuto leaves the phone alone: lock it, put it away or use it as usual. Where the car screen
+  would sleep with the phone (Android 17 on a Pixel, for example), AnyAuto keeps the phone awake
+  with its screen off. The power button still puts it to sleep, and the car screen then pauses
+  until you tap it. AnyAuto checks which case your phone is. When Android Auto stops showing
+  AnyAuto, the phone goes back to how it was (asleep if AnyAuto woke it). If you move between the
+  grid, the app and other car screens, AnyAuto waits 8 seconds before it lets go, so the phone
+  doesn't keep lighting up.
+- **Using the phone at the same time:** turn on ⋮ → **Keep the phone's screen on**. Touching the
+  phone moves Android's focus to it, so a keyboard open on the car screen closes.
 - **Apps on the car screen skip the phone's lock,** like Android Auto's own apps. Dark doesn't
   mean locked: if the phone was unlocked, it stays unlocked.
 - **Some windows show black.** Apps that protect their windows show black on the car screen.
@@ -158,11 +162,13 @@ Android Auto (car screen)                AnyAuto app process              Shizuk
   (`IWindowManager.setDisplayImePolicy`), like scrcpy's `--display-ime-policy local`. The
   Keyboard button reads the keyboard state through accessibility, connected only for that
   moment, then sends Back or taps the selected text field.
-- **Dark phone (`PhonePower`):** a virtual display sleeps with its display group. On Android 17
-  builds that support desktop mode, every virtual display is put in the phone's group. So
-  AnyAuto holds a wake lock and powers off only the phone's own panel
-  (`IDisplayManager.requestDisplayPower`). Whenever the system turns the panel back on, AnyAuto
-  turns it off again.
+- **The phone's screen (`PhonePower`):** a virtual display sleeps with its display group.
+  AnyAuto checks the group after making the display. If it has a group of its own (Android 14,
+  for example), only that group is kept awake (a wake lock for that display) and the phone is
+  left alone. On Android 17 builds that support desktop mode, every virtual display is put in the
+  phone's group. There AnyAuto holds a wake lock and powers off only the phone's own panel
+  (`IDisplayManager.requestDisplayPower`), and turns it off again whenever the system turns it
+  back on.
 
 ## Source
 

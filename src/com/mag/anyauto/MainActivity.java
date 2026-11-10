@@ -37,7 +37,7 @@ import java.util.List;
 public final class MainActivity extends Activity implements Shell.Listener {
     static final String UNKNOWNAUTO = "com.mag.unknownauto";
     static final String UNKNOWNAUTO_RELEASES = "https://github.com/GitMag/UnknownAuto/releases/latest";
-    private static final int MENU_HELP = 1, MENU_INSTALL = 2, MENU_KEYBOARD = 3, MENU_FULL = 4;
+    private static final int MENU_HELP = 1, MENU_INSTALL = 2, MENU_KEYBOARD = 3, MENU_FULL = 4, MENU_PHONE_ON = 5;
 
     private LinearLayout cards;
     private TextView section, sectionCount;
@@ -141,9 +141,11 @@ public final class MainActivity extends Activity implements Shell.Listener {
     public boolean onCreateOptionsMenu(Menu menu) {
         menu.add(0, MENU_FULL, 0, "Full screen in the car").setCheckable(true)
                 .setChecked(Prefs.fullScreen(this));
-        menu.add(0, MENU_KEYBOARD, 1, "Keyboard");
-        menu.add(0, MENU_HELP, 2, "Help");
-        menu.add(0, MENU_INSTALL, 3, "Install for the car");
+        menu.add(0, MENU_PHONE_ON, 1, "Keep the phone's screen on").setCheckable(true)
+                .setChecked(Prefs.keepPhoneOn(this));
+        menu.add(0, MENU_KEYBOARD, 2, "Keyboard");
+        menu.add(0, MENU_HELP, 3, "Help");
+        menu.add(0, MENU_INSTALL, 4, "Install for the car");
         return true;
     }
 
@@ -156,8 +158,15 @@ public final class MainActivity extends Activity implements Shell.Listener {
             Mirror.settingsChanged();
             return true;
         }
+        if (item.getItemId() == MENU_PHONE_ON) {
+            boolean on = !item.isChecked();
+            item.setChecked(on);
+            Prefs.setKeepPhoneOn(this, on);
+            Mirror.settingsChanged();
+            return true;
+        }
         if (item.getItemId() == MENU_KEYBOARD) {
-            String[] choices = {"On the car screen", "On the phone (its screen then stays on while AnyAuto is on the car screen)"};
+            String[] choices = {"On the car screen", "On the phone (its screen then stays on)"};
             new AlertDialog.Builder(this)
                     .setTitle("Where the keyboard opens")
                     .setSingleChoiceItems(choices, Prefs.keyboardOnCar(this) ? 0 : 1, (d, which) -> {

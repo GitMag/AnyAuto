@@ -90,6 +90,7 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
     private int pushedW, pushedH, pushedDpi;
     private boolean pushedKeep;
     private Boolean pushedKeyboard;   // keyboard on the display (true) or on the phone (false)
+    private Boolean pushedPhoneOn;    // "Keep the phone's screen on"
     private int displayId = -1;
     private volatile ComponentName launched;
     private volatile Problem problem;
@@ -249,7 +250,7 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
         }
     }
 
-    /** A setting changed (keyboard, full screen): the car's Mirror applies it now. */
+    /** A setting changed (keyboard, full screen, phone screen): the car's Mirror applies it now. */
     public static void settingsChanged() {
         Mirror m = carShowing;
         if (m != null) m.io.post(m::applyContent);
@@ -395,6 +396,7 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
             pushedOn = false;
             pushedKeep = false;
             pushedKeyboard = null;
+            pushedPhoneOn = null;
             displayId = -1;
             launched = null;
         }
@@ -425,6 +427,11 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
             if (!keyboard.equals(pushedKeyboard)) {
                 s.keyboardHere(keyboard);
                 pushedKeyboard = keyboard;
+            }
+            Boolean phoneOn = car && Prefs.keepPhoneOn(context);
+            if (!phoneOn.equals(pushedPhoneOn)) {
+                s.phoneScreenOn(phoneOn);
+                pushedPhoneOn = phoneOn;
             }
             boolean keep = screen != null || hold;
             if (car && pushedKeep != keep) {

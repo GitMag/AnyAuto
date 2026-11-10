@@ -37,8 +37,9 @@ interface IDisplayService {
     // /data/local/tmp/anyauto-headless.png. Returns the display id, or -1.
     int showHeadless(int width, int height, int dpi) = 8;
 
-    // The car shows AnyAuto (true) or not (false): keep the phone awake with its own screen dark
-    // while it does, because the display sleeps with the phone (PhonePower.java).
+    // The car shows AnyAuto (true) or not (false). If the display shares the phone's display group
+    // it sleeps with the phone, so the phone is kept awake with its own screen dark (PhonePower);
+    // if it has a group of its own, the phone is left alone (DisplayService.applyPhoneMode).
     oneway void keepRunning(boolean on) = 9;
 
     // Where the keyboard opens: on the display itself (true, the car: nobody touches the dark
@@ -51,4 +52,8 @@ interface IDisplayService {
     // (a tap on the field). Returns "shown", "hidden", "no field", "old android" (needs
     // Android 11) or "error: ...".
     String toggleKeyboard() = 11;
+
+    // The setting "Keep the phone's screen on" (car only): the phone stays awake with its screen
+    // on while the car shows AnyAuto, instead of dark or left alone (DisplayService.applyPhoneMode).
+    oneway void phoneScreenOn(boolean on) = 12;
 }
