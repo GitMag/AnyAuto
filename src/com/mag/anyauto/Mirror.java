@@ -369,16 +369,16 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
     }
 
     /**
-     * The setting "Full screen in the car": the app also gets the band above the stable area that
-     * Android Auto keeps for Apps and Back; they float over the app while shown and hide by
-     * themselves. The gap at the top becomes the same as at the bottom, and it does not follow
-     * the buttons showing and hiding, so the app never jumps. Only for the full-width view: the
-     * dashboard and launcher cards have no such band.
+     * The setting "Full screen in the car": the app gets the whole surface, edge to edge, the way
+     * Google Maps draws its map. The stable area leaves a margin all round (12 px on the desktop
+     * head unit, plus the band Android Auto keeps for Apps and Back), which showed as a black frame.
+     * The buttons float over the app while shown and hide by themselves, and Android Auto rounds the
+     * surface's corners. Fixed, so the app never jumps when the buttons show and hide. Only for
+     * the full-width view: the dashboard and launcher cards keep their card.
      */
     private Rect fullScreen(Rect s) {
         if (s.width() < screenW * 0.8f) return s;
-        int top = Math.max(0, screenH - s.bottom);
-        return top < s.top ? new Rect(s.left, top, s.right, s.bottom) : s;
+        return new Rect(0, 0, screenW, screenH);
     }
 
     private void sync() {

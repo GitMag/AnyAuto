@@ -90,8 +90,9 @@ dashboard card), **Keyboard** and **Back**. The ⋮ menu has the settings and **
 app's own Back). For drags, turn on the pan button in the map strip. AnyAuto also works on the
 Android Auto dashboard: the app is drawn into the dashboard card.
 
-**Full screen:** the app uses the whole car screen, and the buttons float over its top corner
-until they hide by themselves. To keep them out of the app's way, turn off ⋮ → **Full screen in
+**Full screen:** the app uses the whole car screen, edge to edge, like Google Maps does (Android
+Auto rounds the corners a little). The buttons float over its top corner until they hide by
+themselves. To keep them out of the app's way, turn off ⋮ → **Full screen in
 the car**; the app then starts below them.
 
 **Typing:** tap a text field and the keyboard opens on the car screen. The **Keyboard** button
