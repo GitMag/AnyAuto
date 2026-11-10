@@ -116,6 +116,9 @@ directions and "navigate to" requests.
 - **Some windows show black.** Apps that protect their windows show black on the car screen.
   Examples are banking apps, DRM video (Netflix and other streaming services) and Chrome
   incognito tabs. Non-DRM video, such as YouTube, works.
+- **Portrait-only apps** (many games and messaging apps) show upright in a column in the
+  middle of the car screen, at full height. The car screen can't turn, so AnyAuto keeps its
+  display landscape whatever the app asks for.
 - **One car display:** **Try** is unavailable while AnyAuto is on the car screen.
 
 **Drive safely.** AnyAuto doesn't lock anything while the car is moving. Use video and other

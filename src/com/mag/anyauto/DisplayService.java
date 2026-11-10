@@ -120,6 +120,7 @@ public final class DisplayService extends IDisplayService.Stub {
                 display = create(w, h, d, s);
                 displayId = display.getDisplay().getDisplayId();
                 Log.i(TAG, "display " + displayId + " " + w + "x" + h + "@" + d + " flags 0x" + Integer.toHexString(flags));
+                keepLandscape();
                 applyKeyboard();
             } else {
                 display.setSurface(s);
@@ -192,6 +193,68 @@ public final class DisplayService extends IDisplayService.Stub {
      * display and INTERNAL_SYSTEM_WINDOW (the shell user has it). Best effort: if it is refused,
      * the display still works and the keyboard stays on the phone.
      */
+    /** IWindowManager, straight from ServiceManager: WindowManagerGlobal.getWindowManagerService()
+     *  needs ApplicationSharedMemory on Android 17, which this process never sets up. */
+    private static Object windowManager() throws Exception {
+        Object binder = Class.forName("android.os.ServiceManager")
+                .getMethod("getService", String.class).invoke(null, Context.WINDOW_SERVICE);
+        return Class.forName("android.view.IWindowManager$Stub")
+                .getMethod("asInterface", android.os.IBinder.class).invoke(null, binder);
+    }
+
+    /**
+     * The display never turns for an app. A virtual display follows an app's requested
+     * orientation like a phone: on Android 14 a portrait-only app turned it to portrait (rotation
+     * 270, 392x696), and the car's landscape surface then showed the whole display shrunk into a
+     * narrow column, with the car's taps landing in the wrong places. Android 17 letterboxes such
+     * apps by itself. Here every Android gets that: the app stays upright at full height in a
+     * column in the middle. Rotation 0 is the display's own shape, so a portrait-shaped dashboard
+     * card stays portrait. Any one of the three settings was enough on Android 14; each is best
+     * effort (all need SET_ORIENTATION, which the shell user has).
+     */
+    private void keepLandscape() {
+        int id = displayId;
+        Object wm;
+        try {
+            wm = windowManager();
+        } catch (Throwable t) {
+            Log.w(TAG, "orientation: no window manager: " + describe(t));
+            return;
+        }
+        StringBuilder done = new StringBuilder();
+        for (Method m : wm.getClass().getMethods()) {
+            Class<?>[] p = m.getParameterTypes();
+            try {
+                switch (m.getName()) {
+                    case "setIgnoreOrientationRequest": // Android 12+: (displayId, ignore)
+                        if (p.length == 2 && p[0] == int.class && p[1] == boolean.class) {
+                            m.invoke(wm, id, true);
+                            done.append(" ignore-requests");
+                        }
+                        break;
+                    case "setFixedToUserRotation": // Android 10+: (displayId, FIXED_TO_USER_ROTATION_ENABLED = 2)
+                        if (p.length == 2 && p[0] == int.class && p[1] == int.class) {
+                            m.invoke(wm, id, 2);
+                            done.append(" fixed-to-user");
+                        }
+                        break;
+                    case "freezeDisplayRotation": // (displayId, rotation), (displayId, rotation, caller) on 14+
+                        if (p.length == 2 && p[0] == int.class && p[1] == int.class) {
+                            m.invoke(wm, id, 0);
+                            done.append(" rotation-0");
+                        } else if (p.length == 3 && p[0] == int.class && p[1] == int.class && p[2] == String.class) {
+                            m.invoke(wm, id, 0, "AnyAuto");
+                            done.append(" rotation-0");
+                        }
+                        break;
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "orientation: " + m.getName() + ": " + describe(t));
+            }
+        }
+        Log.i(TAG, "display " + id + " stays as it is:" + (done.length() == 0 ? " nothing applied" : done));
+    }
+
     private void applyKeyboard() {
         int id = displayId;
         boolean here = keyboardHere;
@@ -200,12 +263,7 @@ public final class DisplayService extends IDisplayService.Stub {
             return;
         }
         try {
-            // straight from ServiceManager: WindowManagerGlobal.getWindowManagerService() needs
-            // ApplicationSharedMemory on Android 17, which this process never sets up
-            Object binder = Class.forName("android.os.ServiceManager")
-                    .getMethod("getService", String.class).invoke(null, Context.WINDOW_SERVICE);
-            Object wm = Class.forName("android.view.IWindowManager$Stub")
-                    .getMethod("asInterface", android.os.IBinder.class).invoke(null, binder);
+            Object wm = windowManager();
             if (Build.VERSION.SDK_INT >= 31) {
                 // WindowManager.DISPLAY_IME_POLICY_LOCAL = 0, DISPLAY_IME_POLICY_FALLBACK_DISPLAY = 1
                 wm.getClass().getMethod("setDisplayImePolicy", int.class, int.class)
