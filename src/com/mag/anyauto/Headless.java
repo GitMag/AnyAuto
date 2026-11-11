@@ -32,6 +32,11 @@ public final class Headless extends BroadcastReceiver {
                 if (intent.hasExtra("here")) s.keyboardHere(intent.getBooleanExtra("here", true));
                 // --ez phoneon true: the setting "Keep the phone's screen on"
                 if (intent.hasExtra("phoneon")) s.phoneScreenOn(intent.getBooleanExtra("phoneon", false));
+                // --ez fights true: ask whether the flicker guard gave up darkening the phone
+                if (intent.getBooleanExtra("fights", false)) {
+                    Log.i(TAG, "headless: phone screen fights: " + s.phoneScreenFights() + " (" + s.info() + ")");
+                    return;
+                }
                 // --ez keyboard true: press the keyboard button, as the car's action strip does
                 if (intent.getBooleanExtra("keyboard", false)) {
                     Log.i(TAG, "headless: keyboard button: " + s.toggleKeyboard());

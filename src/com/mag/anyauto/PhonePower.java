@@ -39,6 +39,14 @@ final class PhonePower {
     // the car switches between AnyAuto's grid, the app and other screens: release only when it
     // has stayed away this long, so the phone does not light up and sleep on every switch
     static final long GRACE_MS = 8000;
+    // the flicker guard: some phones turn their screen straight back on when it is powered off
+    // (reported on a Samsung with One UI 9); fighting that makes the screen flicker without end
+    // and the phone unusable. Three darkenings within this window (the screen came back on by
+    // itself twice) mean the phone fights, and it then stays on instead.
+    private static final int FIGHT_BLANKS = 3;
+    private static final long FIGHT_WINDOW_MS = 10_000;
+    // the phone fell asleep this soon after we darkened it: that was us, not the power button
+    private static final long SLEPT_AFTER_BLANK_MS = 3000;
 
     private final HandlerThread thread = new HandlerThread("anyauto-power");
     private final Handler h;
@@ -49,6 +57,10 @@ final class PhonePower {
     private volatile boolean armed; // we hold the phone awake (and dark) right now
     private volatile boolean dark;  // false: the keyboard is on the phone, so its screen stays on
     private boolean wokeIt; // the phone was asleep when we armed
+    private volatile boolean fights; // the phone would not stay dark: its screen stays on now
+    private final long[] blanks = new long[FIGHT_BLANKS]; // when we last darkened it (ring)
+    private int blankCount;
+    private long lastBlank;
     private Object idm;
     private Method requestDisplayPower;
 
@@ -130,8 +142,14 @@ final class PhonePower {
         });
     }
 
+    /** True once the flicker guard found that this phone does not stay dark. */
+    boolean fights() {
+        return fights;
+    }
+
     String describe() {
-        return wanted ? (armed ? (dark ? "phone kept awake, screen off" : "phone kept awake, screen on for the keyboard")
+        return wanted ? (armed ? (fights ? "phone kept awake, screen on (it would not stay off)"
+                : dark ? "phone kept awake, screen off" : "phone kept awake, screen on")
                 : "phone asleep, car screen paused") : "phone untouched";
     }
 
@@ -157,6 +175,12 @@ final class PhonePower {
         public void run() {
             if (!armed) return;
             if (!pm.isInteractive()) {
+                if (dark && !fights && SystemClock.uptimeMillis() - lastBlank < SLEPT_AFTER_BLANK_MS) {
+                    // asleep right after we darkened it: the phone treats a dark screen as sleep
+                    giveUpDark("it falls asleep when its screen is powered off");
+                    h.postDelayed(this, WATCH_MS);
+                    return;
+                }
                 // the power button: let it sleep; the next tap on the car screen wakes it again
                 Log.i(TAG, "phone put to sleep by the user; the car screen pauses until it is tapped");
                 armed = false;
@@ -207,9 +231,30 @@ final class PhonePower {
     }
 
     private void blank() {
-        if (!dark) return;
+        // asleep (the power button, or going to sleep right now): nothing to darken, and not a
+        // darkening that the flicker guard should count
+        if (!dark || fights || !pm.isInteractive()) return;
         Display d = dm.getDisplay(Display.DEFAULT_DISPLAY);
-        if (d == null || d.getState() != Display.STATE_OFF) setPhonePower(Display.STATE_OFF);
+        if (d != null && d.getState() == Display.STATE_OFF) return;
+        long now = SystemClock.uptimeMillis();
+        blanks[blankCount % FIGHT_BLANKS] = now;
+        blankCount++;
+        // the oldest of the last FIGHT_BLANKS darkenings sits where the next one will go
+        if (blankCount >= FIGHT_BLANKS && now - blanks[blankCount % FIGHT_BLANKS] < FIGHT_WINDOW_MS) {
+            giveUpDark("its screen keeps coming back on");
+            return;
+        }
+        lastBlank = now;
+        setPhonePower(Display.STATE_OFF);
+    }
+
+    /** The flicker guard: stop powering the screen off; the phone stays awake with it on. */
+    private void giveUpDark(String why) {
+        fights = true;
+        Log.w(TAG, "phone: " + why + ". It stays on from now on, so it does not flicker");
+        h.removeCallbacks(checkRestored);
+        setPhonePower(Display.STATE_UNKNOWN);
+        if (!pm.isInteractive()) wakeUp();
     }
 
     /** IDisplayManager.requestDisplayPower: (int, int state) on Android 17, (int, boolean on) before. */

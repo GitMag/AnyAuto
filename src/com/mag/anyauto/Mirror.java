@@ -39,6 +39,8 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
     private static final String TAG = "AnyAuto";
     // the car sends the visible and the stable area one after the other: resize once
     private static final long CONTENT_SETTLE_MS = 150;
+    // while the car shows AnyAuto: how often to ask whether the phone refused to stay dark
+    private static final long FIGHT_CHECK_MS = 10_000;
 
     public interface Listener {
         /** Main thread: {@link #problem()} may have changed. */
@@ -382,6 +384,32 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
         return new Rect(0, 0, screenW, screenH);
     }
 
+    /**
+     * The flicker guard's memory (PhonePower): a phone that would not stay dark keeps its screen
+     * on in later drives too, by turning on "Keep the phone's screen on" (the user can turn it off
+     * again in the menu). Asked every FIGHT_CHECK_MS while the car shows AnyAuto.
+     */
+    private final Runnable checkFights = this::checkFights;
+
+    private void checkFights() {
+        IDisplayService s = pushedTo;
+        if (s == null || !car || !pushedKeep) return;
+        try {
+            if (s.phoneScreenFights()) {
+                if (!Prefs.keepPhoneOn(context)) {
+                    Prefs.setKeepPhoneOn(context, true);
+                    Log.i(TAG, "the phone does not stay dark: Keep the phone's screen on is now on");
+                    applyContent(); // pushes the setting
+                }
+                return;
+            }
+        } catch (RemoteException e) {
+            lost(s);
+            return;
+        }
+        io.postDelayed(checkFights, FIGHT_CHECK_MS);
+    }
+
     private void sync() {
         IDisplayService s = Shell.service();
         if (s == null) {
@@ -439,6 +467,8 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
                 s.keepRunning(keep);
                 if (keep) setCarShowing(this);
                 else if (carShowing == this) setCarShowing(null);
+                io.removeCallbacks(checkFights);
+                if (keep) io.postDelayed(checkFights, FIGHT_CHECK_MS);
             }
             if (app != null && !app.equals(launched)) {
                 String r = s.launch(app);

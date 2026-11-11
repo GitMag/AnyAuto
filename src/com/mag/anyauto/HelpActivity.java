@@ -35,6 +35,7 @@ public final class HelpActivity extends Activity {
         heading(col, "While an app is on the car screen");
         para(col, "On many phones the car screen runs on its own and the phone is left alone: lock it or use it as usual. Where the car screen would sleep with the phone (Android 17 on a Pixel, for example), the phone stays awake with its screen off. The power button still puts it to sleep; the car screen then pauses until you tap it. When Android Auto stops showing AnyAuto, the phone goes back to how it was.");
         para(col, "To use the phone at the same time, turn on ⋮ → Keep the phone's screen on.");
+        para(col, "If your phone turns its screen straight back on, or goes to sleep, when AnyAuto turns it off, AnyAuto stops doing that so the screen doesn't flicker, and turns on Keep the phone's screen on for later drives.");
         para(col, "Tap a text field and the keyboard opens on the car screen. The Keyboard button opens it for the selected text field, or closes it. To type on the phone instead, choose ⋮ → Keyboard → On the phone; the phone's screen then stays on.");
         para(col, "The app uses the whole car screen, and Apps, Keyboard and Back float over its top corner until they hide. To keep them out of the app's way, turn off ⋮ → Full screen in the car.");
 

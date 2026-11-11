@@ -114,6 +114,10 @@ directions and "navigate to" requests.
   AnyAuto, the phone goes back to how it was (asleep if AnyAuto woke it). If you move between the
   grid, the app and other car screens, AnyAuto waits 8 seconds before it lets go, so the phone
   doesn't keep lighting up.
+- **Phones that won't stay dark:** some phones (a Samsung on One UI 9 was reported) turn their
+  screen straight back on, or go to sleep, when AnyAuto turns it off. AnyAuto notices within a
+  few seconds and stops turning it off, so the screen doesn't flicker, and it turns on
+  ⋮ → **Keep the phone's screen on** so later drives skip the dark screen on that phone.
 - **Using the phone at the same time:** turn on ⋮ → **Keep the phone's screen on**. Touching the
   phone moves Android's focus to it, so a keyboard open on the car screen closes.
 - **Apps on the car screen skip the phone's lock,** like Android Auto's own apps. Dark doesn't

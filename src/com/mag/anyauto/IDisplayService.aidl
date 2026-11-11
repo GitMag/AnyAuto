@@ -56,4 +56,8 @@ interface IDisplayService {
     // The setting "Keep the phone's screen on" (car only): the phone stays awake with its screen
     // on while the car shows AnyAuto, instead of dark or left alone (DisplayService.applyPhoneMode).
     oneway void phoneScreenOn(boolean on) = 12;
+
+    // The flicker guard (PhonePower): true once this phone turned its screen back on by itself, or
+    // fell asleep, when AnyAuto powered the screen off; its screen then stays on instead.
+    boolean phoneScreenFights() = 13;
 }

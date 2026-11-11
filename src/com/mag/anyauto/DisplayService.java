@@ -200,6 +200,12 @@ public final class DisplayService extends IDisplayService.Stub {
     }
 
     @Override
+    public boolean phoneScreenFights() {
+        PhonePower p = phone;
+        return p != null && p.fights();
+    }
+
+    @Override
     public synchronized void phoneScreenOn(boolean on) {
         if (keepPhoneOn == on) return;
         keepPhoneOn = on;
