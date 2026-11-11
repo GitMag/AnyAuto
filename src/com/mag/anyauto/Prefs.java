@@ -16,6 +16,9 @@ public final class Prefs {
     private static final String KEYBOARD_ON_CAR = "keyboard_on_car";
     private static final String FULL_SCREEN = "full_screen";
     private static final String KEEP_PHONE_ON = "keep_phone_on";
+    private static final String AUTO_UPDATE = "auto_update";
+    private static final String UPDATE_CHECKED = "update_checked";
+    private static final String UPDATE_VERSION = "update_version";
 
     private Prefs() {
     }
@@ -102,5 +105,31 @@ public final class Prefs {
 
     public static void setKeepPhoneOn(Context c, boolean on) {
         p(c).edit().putBoolean(KEEP_PHONE_ON, on).apply();
+    }
+
+    /** Check GitHub for a new version when AnyAuto is opened (default on). */
+    public static boolean autoUpdate(Context c) {
+        return p(c).getBoolean(AUTO_UPDATE, true);
+    }
+
+    public static void setAutoUpdate(Context c, boolean on) {
+        p(c).edit().putBoolean(AUTO_UPDATE, on).apply();
+    }
+
+    static long lastUpdateCheck(Context c) {
+        return p(c).getLong(UPDATE_CHECKED, 0);
+    }
+
+    static void setLastUpdateCheck(Context c, long when) {
+        p(c).edit().putLong(UPDATE_CHECKED, when).apply();
+    }
+
+    /** The downloaded update's version name (Updater), or null. */
+    static String updateVersion(Context c) {
+        return p(c).getString(UPDATE_VERSION, null);
+    }
+
+    static void setUpdateVersion(Context c, String v) {
+        p(c).edit().putString(UPDATE_VERSION, v).apply();
     }
 }

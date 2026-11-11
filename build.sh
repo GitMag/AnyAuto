@@ -23,8 +23,8 @@ JAR=$SDK/platforms/android-$COMPILE_SDK/android.jar
 
 APP_ID=com.mag.anyauto
 TARGET_SDK=35
-VERSION_CODE=7
-VERSION_NAME=0.7
+VERSION_CODE=8
+VERSION_NAME=0.8
 APK=anyauto.apk
 
 if [ "$1" = "clean" ]; then rm -rf build $APK; echo "removed build/"; exit 0; fi
@@ -101,7 +101,7 @@ MUST="androidx.car.app.CarAppService androidx.car.app.category.NAVIGATION
       com.google.android.gms.car.application rikka.shizuku.ShizukuProvider
       moe.shizuku.manager.permission.API_V23 com.mag.anyauto.PreviewActivity"
 # no routing: "navigate to" requests stay with Google Maps
-MUST_NOT="androidx.car.app.action.NAVIGATE androidx.car.app.category.FEATURE_CLUSTER android.permission.INTERNET"
+MUST_NOT="androidx.car.app.action.NAVIGATE androidx.car.app.category.FEATURE_CLUSTER"
 for m in $MUST; do
     grep -q "$m" build/manifest.txt || { echo "missing from the merged manifest: $m" >&2; exit 1; }
 done

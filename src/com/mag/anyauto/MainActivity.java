@@ -37,7 +37,8 @@ import java.util.List;
 public final class MainActivity extends Activity implements Shell.Listener {
     static final String UNKNOWNAUTO = "com.mag.unknownauto";
     static final String UNKNOWNAUTO_RELEASES = "https://github.com/GitMag/UnknownAuto/releases/latest";
-    private static final int MENU_HELP = 1, MENU_INSTALL = 2, MENU_KEYBOARD = 3, MENU_FULL = 4, MENU_PHONE_ON = 5;
+    private static final int MENU_HELP = 1, MENU_INSTALL = 2, MENU_KEYBOARD = 3, MENU_FULL = 4, MENU_PHONE_ON = 5,
+            MENU_AUTO_UPDATE = 6, MENU_CHECK_UPDATE = 7;
 
     private LinearLayout cards;
     private TextView section, sectionCount;
@@ -123,6 +124,8 @@ public final class MainActivity extends Activity implements Shell.Listener {
             });
         }, "anyauto-apps").start();
         refresh();
+        // only here, while AnyAuto is open; skipped when turned off or checked within the hour
+        Updater.check(this, false, r -> refresh());
     }
 
     @Override
@@ -144,8 +147,11 @@ public final class MainActivity extends Activity implements Shell.Listener {
         menu.add(0, MENU_PHONE_ON, 1, "Keep the phone's screen on").setCheckable(true)
                 .setChecked(Prefs.keepPhoneOn(this));
         menu.add(0, MENU_KEYBOARD, 2, "Keyboard");
-        menu.add(0, MENU_HELP, 3, "Help");
-        menu.add(0, MENU_INSTALL, 4, "Install for the car");
+        menu.add(0, MENU_AUTO_UPDATE, 3, "Check for updates automatically").setCheckable(true)
+                .setChecked(Prefs.autoUpdate(this));
+        menu.add(0, MENU_CHECK_UPDATE, 4, "Check for updates now");
+        menu.add(0, MENU_HELP, 5, "Help");
+        menu.add(0, MENU_INSTALL, 6, "Install for the car");
         return true;
     }
 
@@ -163,6 +169,23 @@ public final class MainActivity extends Activity implements Shell.Listener {
             item.setChecked(on);
             Prefs.setKeepPhoneOn(this, on);
             Mirror.settingsChanged();
+            return true;
+        }
+        if (item.getItemId() == MENU_AUTO_UPDATE) {
+            boolean on = !item.isChecked();
+            item.setChecked(on);
+            Prefs.setAutoUpdate(this, on);
+            return true;
+        }
+        if (item.getItemId() == MENU_CHECK_UPDATE) {
+            android.widget.Toast.makeText(this, "Checking for updates…", android.widget.Toast.LENGTH_SHORT).show();
+            Updater.check(this, true, r -> {
+                String m = r.error != null ? "Couldn't check for updates: " + r.error
+                        : r.version != null ? "AnyAuto " + r.version + " is ready to install"
+                        : "AnyAuto is up to date";
+                android.widget.Toast.makeText(this, m, android.widget.Toast.LENGTH_LONG).show();
+                refresh();
+            });
             return true;
         }
         if (item.getItemId() == MENU_KEYBOARD) {
@@ -241,6 +264,22 @@ public final class MainActivity extends Activity implements Shell.Listener {
                         "Shizuku asks once. Choose Allow all the time.",
                         Ui.filled(this, "Allow"), v -> Shell.requestPermission()));
                 break;
+        }
+        String update = Updater.readyVersion(this);
+        if (update != null) {
+            boolean ua = isUnknownAutoInstalled(this);
+            View c = card(R.drawable.ic_check, "AnyAuto " + update + " is ready",
+                    ua ? "Tap Update, then Install in UnknownAuto. UnknownAuto keeps AnyAuto installed the way Android Auto accepts."
+                            : "Updates install with UnknownAuto, so Android Auto keeps accepting AnyAuto. Get UnknownAuto first.",
+                    Ui.filled(this, ua ? "Update" : "Get UnknownAuto"),
+                    v -> {
+                        if (ua) Updater.install(this);
+                        else openUnknownAuto(this);
+                    });
+            Button news = Ui.textButton(this, "What's new");
+            news.setOnClickListener(v -> Updater.openReleasePage(this));
+            ((LinearLayout) c.findViewWithTag("buttons")).addView(news, 0);
+            cards.addView(c);
         }
         long version = versionCode();
         if (!installedForCar(this) && !Prefs.installCardHidden(this, version)) {
@@ -353,6 +392,10 @@ public final class MainActivity extends Activity implements Shell.Listener {
         } catch (ActivityNotFoundException e) {
             startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://shizuku.rikka.app/download/")));
         }
+    }
+
+    static boolean isUnknownAutoInstalled(Context c) {
+        return c.getPackageManager().getLaunchIntentForPackage(UNKNOWNAUTO) != null;
     }
 
     static String unknownAutoLabel(Context c) {

@@ -39,6 +39,9 @@ public final class HelpActivity extends Activity {
         para(col, "Tap a text field and the keyboard opens on the car screen. The Keyboard button opens it for the selected text field, or closes it. To type on the phone instead, choose ⋮ → Keyboard → On the phone; the phone's screen then stays on.");
         para(col, "The app uses the whole car screen, and Apps, Keyboard and Back float over its top corner until they hide. To keep them out of the app's way, turn off ⋮ → Full screen in the car.");
 
+        heading(col, "Updates");
+        para(col, "When you open AnyAuto, it looks for a new version on GitHub. When one is ready, tap Update on the Home screen, then Install in UnknownAuto, so Android Auto keeps accepting AnyAuto. Nothing runs in the background. Turn it off with ⋮ → Check for updates automatically.");
+
         heading(col, "Limits");
         para(col, "Apps that protect their windows (banking, DRM video, incognito tabs) show black.");
         para(col, "The Keyboard button needs Android 11 or newer.");

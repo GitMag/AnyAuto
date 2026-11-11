@@ -12,6 +12,8 @@
     <uses-permission android:name="androidx.car.app.ACCESS_SURFACE" />
     <!-- bind DisplayService as the shell user through Shizuku -->
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
+    <!-- only to check GitHub for a new release while AnyAuto is open (Updater; can be turned off) -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <queries>
         <!-- the apps that can be put in the car: everything with a launcher icon -->
@@ -103,5 +105,16 @@
             android:exported="true"
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
         <meta-data android:name="moe.shizuku.client.V3_SUPPORT" android:value="true" />
+
+        <!-- hands a downloaded update to UnknownAuto (Updater.install) -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.mag.anyauto.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

@@ -11,7 +11,8 @@ on a car-sized virtual display, draws that display onto the car screen, and send
 taps, drags, flings and pinches back to the app as touches.
 
 It uses [Shizuku](https://shizuku.rikka.app/), so you don't need root or a computer in the
-car. It has no internet permission, no account and no analytics.
+car. No account, no analytics. The only thing it does online is look for a new version on
+GitHub when you open it, and you can turn that off.
 
 **[Download the APK](https://github.com/GitMag/AnyAuto/releases/latest)** from the latest release.
 
@@ -52,6 +53,12 @@ car. It has no internet permission, no account and no analytics.
 2. Open UnknownAuto, tap **Load APK or XAPK…**, pick the APK and tap **Install**. For the
    desktop head unit, a normal install is enough.
 3. Add AnyAuto to Android Auto's launcher (Android Auto settings → *Customize launcher*).
+
+**Updates:** when you open AnyAuto, it looks for a new release on GitHub (at most once an hour),
+downloads it and checks that it's really AnyAuto, newer and signed with the same key. The Home
+screen then shows *AnyAuto x.y is ready*: tap **Update**, then **Install** in UnknownAuto, so
+Android Auto keeps accepting AnyAuto. Nothing runs in the background. Turn it off with
+⋮ → **Check for updates automatically**, or check by hand with ⋮ → **Check for updates now**.
 
 Or build it yourself with the plain Android SDK tools (no Gradle; build-tools 35 and the
 android-35 platform):
