@@ -47,12 +47,21 @@ final class PhonePower {
     private static final long FIGHT_WINDOW_MS = 10_000;
     // the phone fell asleep this soon after we darkened it: that was us, not the power button
     private static final long SLEPT_AFTER_BLANK_MS = 3000;
+    // a phone woken from sleep turns its screen on again while it finishes waking (a Pixel on
+    // Android 17 did once, 0.4 s after the first darkening): darkenings this soon after such a wake
+    // are not counted by the flicker guard. Otherwise that, plus the one relight when Android dims
+    // the screen before its timeout, made three in 8 s, and the guard kept a Pixel's screen on.
+    private static final long WAKE_SETTLE_MS = 2500;
 
     private final HandlerThread thread = new HandlerThread("anyauto-power");
     private final Handler h;
     private final DisplayManager dm;
     private final PowerManager pm;
-    private final PowerManager.WakeLock lock;
+    // a bright lock while the screen is to be dark: with a dim one, Android dims the screen before
+    // its timeout, which lights the powered-off panel twice for a moment (Pixel, Android 17) and
+    // counted as two of the flicker guard's darkenings; the dim one while the screen stays on
+    private final PowerManager.WakeLock dimLock, brightLock;
+    private PowerManager.WakeLock held;
     private boolean wanted; // the car shows AnyAuto
     private volatile boolean armed; // we hold the phone awake (and dark) right now
     private volatile boolean dark;  // false: the keyboard is on the phone, so its screen stays on
@@ -61,6 +70,7 @@ final class PhonePower {
     private final long[] blanks = new long[FIGHT_BLANKS]; // when we last darkened it (ring)
     private int blankCount;
     private long lastBlank;
+    private long settleUntil; // darkenings before this are not counted (the phone is still waking)
     private Object idm;
     private Method requestDisplayPower;
 
@@ -71,9 +81,13 @@ final class PhonePower {
         this.dm = dm;
         pm = powerManager(shell);
         // a screen wake lock keeps the phone's display group awake; ACQUIRE_CAUSES_WAKEUP wakes it
-        lock = pm.newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP,
+        dimLock = pm.newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP,
                 "AnyAuto:car");
-        lock.setReferenceCounted(false);
+        dimLock.setReferenceCounted(false);
+        @SuppressWarnings("deprecation")
+        int bright = PowerManager.SCREEN_BRIGHT_WAKE_LOCK;
+        brightLock = pm.newWakeLock(bright | PowerManager.ACQUIRE_CAUSES_WAKEUP, "AnyAuto:car-dark");
+        brightLock.setReferenceCounted(false);
         dm.registerDisplayListener(new DisplayManager.DisplayListener() {
             @Override
             public void onDisplayAdded(int id) {
@@ -133,6 +147,7 @@ final class PhonePower {
             if (dark == on) return;
             dark = on;
             if (!armed) return;
+            holdLock();
             if (on) {
                 blank();
             } else {
@@ -162,7 +177,8 @@ final class PhonePower {
             return;
         }
         wokeIt = !pm.isInteractive();
-        lock.acquire();
+        settleUntil = wokeIt ? SystemClock.uptimeMillis() + WAKE_SETTLE_MS : 0;
+        holdLock();
         armed = true;
         Log.i(TAG, "phone kept awake with its screen " + (dark ? "off" : "on") + (wokeIt ? " (woken for the car)" : ""));
         blank();
@@ -184,7 +200,7 @@ final class PhonePower {
                 // the power button: let it sleep; the next tap on the car screen wakes it again
                 Log.i(TAG, "phone put to sleep by the user; the car screen pauses until it is tapped");
                 armed = false;
-                lock.release();
+                releaseLock();
                 return;
             }
             blank();
@@ -202,8 +218,22 @@ final class PhonePower {
             setPhonePower(Display.STATE_UNKNOWN); // 0: back to the state the system wants
             h.postDelayed(checkRestored, 500);
         }
-        lock.release();
+        releaseLock();
         Log.i(TAG, "phone released" + (wokeIt ? ", back to sleep" : ", screen back on"));
+    }
+
+    /** The wake lock for now: bright while the screen is to be dark, dim while it stays on. */
+    private void holdLock() {
+        PowerManager.WakeLock want = dark && !fights ? brightLock : dimLock;
+        if (held == want) return;
+        want.acquire();
+        if (held != null) held.release();
+        held = want;
+    }
+
+    private void releaseLock() {
+        if (held != null) held.release();
+        held = null;
     }
 
     /** The panel is still off although the phone is awake: sleep and wake it (lock screen). */
@@ -237,12 +267,14 @@ final class PhonePower {
         Display d = dm.getDisplay(Display.DEFAULT_DISPLAY);
         if (d != null && d.getState() == Display.STATE_OFF) return;
         long now = SystemClock.uptimeMillis();
-        blanks[blankCount % FIGHT_BLANKS] = now;
-        blankCount++;
-        // the oldest of the last FIGHT_BLANKS darkenings sits where the next one will go
-        if (blankCount >= FIGHT_BLANKS && now - blanks[blankCount % FIGHT_BLANKS] < FIGHT_WINDOW_MS) {
-            giveUpDark("its screen keeps coming back on");
-            return;
+        if (now >= settleUntil) {
+            blanks[blankCount % FIGHT_BLANKS] = now;
+            blankCount++;
+            // the oldest of the last FIGHT_BLANKS darkenings sits where the next one will go
+            if (blankCount >= FIGHT_BLANKS && now - blanks[blankCount % FIGHT_BLANKS] < FIGHT_WINDOW_MS) {
+                giveUpDark("its screen keeps coming back on");
+                return;
+            }
         }
         lastBlank = now;
         setPhonePower(Display.STATE_OFF);
@@ -252,6 +284,7 @@ final class PhonePower {
     private void giveUpDark(String why) {
         fights = true;
         Log.w(TAG, "phone: " + why + ". It stays on from now on, so it does not flicker");
+        if (armed) holdLock();
         h.removeCallbacks(checkRestored);
         setPhonePower(Display.STATE_UNKNOWN);
         if (!pm.isInteractive()) wakeUp();
