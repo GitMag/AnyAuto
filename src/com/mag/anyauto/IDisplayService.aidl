@@ -60,4 +60,13 @@ interface IDisplayService {
     // The flicker guard (PhonePower): true once this phone turned its screen back on by itself, or
     // fell asleep, when AnyAuto powered the screen off; its screen then stays on instead.
     boolean phoneScreenFights() = 13;
+
+    // Closes the app on the display, like swiping it away in Recents: every task on the display
+    // is removed. Returns "ok", "none" (nothing was open there) or the reason it failed.
+    String closeApp() = 14;
+
+    // The display's display group: 1 = the phone's (the phone is kept awake while the car shows
+    // AnyAuto, its screen dark unless a setting keeps it on), 0 = its own (the phone is left
+    // alone), -1 = no display yet.
+    int phoneGroup() = 15;
 }

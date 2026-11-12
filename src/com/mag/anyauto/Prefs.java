@@ -19,6 +19,11 @@ public final class Prefs {
     private static final String AUTO_UPDATE = "auto_update";
     private static final String UPDATE_CHECKED = "update_checked";
     private static final String UPDATE_VERSION = "update_version";
+    private static final String NAV_BAR = "nav_bar";
+    private static final String NAV_RIGHT = "nav_right";
+    private static final String PHONE_GROUP = "phone_group";
+    private static final String DARK_NOTE_HIDDEN = "dark_note_hidden";
+    private static final String DARK_TOLD = "dark_told";
 
     private Prefs() {
     }
@@ -78,6 +83,60 @@ public final class Prefs {
 
     public static void setLast(Context c, ComponentName cn) {
         p(c).edit().putString(LAST, cn.flattenToString()).apply();
+    }
+
+    /** The app was closed on the car screen: the next drive starts at the apps grid. */
+    public static void clearLast(Context c) {
+        p(c).edit().remove(LAST).apply();
+    }
+
+    /** AnyAuto's navigation bar on the car screen (Back, Apps, Keyboard, Close, Hide); default shown. */
+    public static boolean navBar(Context c) {
+        return p(c).getBoolean(NAV_BAR, true);
+    }
+
+    public static void setNavBar(Context c, boolean on) {
+        p(c).edit().putBoolean(NAV_BAR, on).apply();
+    }
+
+    /** The navigation bar on the car screen's right edge instead of the left (default left). */
+    public static boolean navRight(Context c) {
+        return p(c).getBoolean(NAV_RIGHT, false);
+    }
+
+    public static void setNavRight(Context c, boolean right) {
+        p(c).edit().putBoolean(NAV_RIGHT, right).apply();
+    }
+
+    /**
+     * What the last display told about this phone ({@code IDisplayService.phoneGroup}): 1 = the car
+     * display shares the phone's display group, so the phone's screen goes dark while the car shows
+     * AnyAuto; 0 = it has its own, the phone is left alone; -1 = not known yet.
+     */
+    static int phoneGroup(Context c) {
+        return p(c).getInt(PHONE_GROUP, -1);
+    }
+
+    static void setPhoneGroup(Context c, int g) {
+        if (g >= 0 && g != phoneGroup(c)) p(c).edit().putInt(PHONE_GROUP, g).apply();
+    }
+
+    /** The Home card "The phone's screen turns off in the car" was dismissed. */
+    static boolean darkNoteHidden(Context c) {
+        return p(c).getBoolean(DARK_NOTE_HIDDEN, false);
+    }
+
+    static void hideDarkNote(Context c) {
+        p(c).edit().putBoolean(DARK_NOTE_HIDDEN, true).apply();
+    }
+
+    /** How many drives the car screen said that the phone's dark screen is on purpose. */
+    static int darkTold(Context c) {
+        return p(c).getInt(DARK_TOLD, 0);
+    }
+
+    static void addDarkTold(Context c) {
+        p(c).edit().putInt(DARK_TOLD, darkTold(c) + 1).apply();
     }
 
     /** Where the keyboard opens while the car shows an app: on the car screen (default) or the phone. */

@@ -16,7 +16,10 @@ GitHub when you open it, and you can turn that off.
 
 **[Download the APK](https://github.com/GitMag/AnyAuto/releases/latest)** from the latest release.
 
-<p align="center"><img src="docs/screenshots/car-app.png" alt="Firefox showing a Wikipedia page on the Android Auto screen through AnyAuto" width="800"></p>
+<p align="center"><img src="docs/screenshots/car-video.png" alt="YouTube playing Big Buck Bunny full screen on the Android Auto screen through AnyAuto, with AnyAuto's navigation bar (Back, Apps, Keyboard, Close, Hide) at the left" width="800"></p>
+
+<p align="center"><em>YouTube on the Android Auto screen, with AnyAuto's navigation bar at the left.
+Video: <a href="https://peach.blender.org/">Big Buck Bunny</a> © Blender Foundation, CC BY 3.0.</em></p>
 
 ## Screenshots
 
@@ -28,11 +31,20 @@ GitHub when you open it, and you can turn that off.
 
 <p align="center"><em>Home: the apps you've chosen for the car. Choose apps: tick the apps to show in the car.</em></p>
 
+<p align="center">
+  <img src="docs/screenshots/car-app.png" alt="Firefox showing a Wikipedia page on the Android Auto screen, with AnyAuto's navigation bar at the left" width="400">
+  &nbsp;
+  <img src="docs/screenshots/car-video-hidden.png" alt="The same car screen with the navigation bar hidden: the video fills the whole width" width="400">
+</p>
+
+<p align="center"><em>A browser beside the navigation bar (other tabs blurred). Hide gives the app the whole
+width; the button at the top right brings the bar back.</em></p>
+
 <p align="center"><img src="docs/screenshots/car-dashboard.png" alt="Android Auto's dashboard with the app in AnyAuto's card on the left and the media card on the right" width="800"></p>
 
 <p align="center"><em>On the Android Auto dashboard, next to the media card (blurred here).</em></p>
 
-<p align="center"><img src="docs/screenshots/phone-preview.png" alt="Try: Chrome at car size on the phone, with Close, Direct, Card and Back on a rail at the right" width="800"></p>
+<p align="center"><img src="docs/screenshots/phone-preview.png" alt="Try: Chrome at car size on the phone, with Close, Direct, Card, Keyboard and Back on a rail at the right" width="800"></p>
 
 <p align="center"><em>Try: an app at car size on the phone, with the same display and gestures as the car.</em></p>
 
@@ -40,7 +52,9 @@ GitHub when you open it, and you can turn that off.
 
 - An Android phone with Android 10 or newer.
 - **Shizuku**, installed and running. On Android 11 and newer it starts on the phone itself.
-  On Android 10 it needs a computer after every reboot.
+  On Android 10 it needs a computer after every reboot. On a rooted phone with Android 13 or
+  older, start Shizuku with Wireless debugging (or adb), not with root: Android 13 and older
+  won't let root make the car display.
 - **[UnknownAuto](https://github.com/GitMag/UnknownAuto)** to install AnyAuto for the car.
   Android Auto runs only car apps that were installed from Google Play, and UnknownAuto
   installs an APK so that it counts as a Play install. The desktop head unit doesn't check
@@ -93,14 +107,23 @@ has **Close**, **Direct** (raw touches instead of car gestures), **Card** (the s
 dashboard card), **Keyboard** and **Back**. The ⋮ menu has the settings and **Help**.
 
 **In the car:** open AnyAuto and pick an app from the grid. The app you have open is marked
-**Open**. The buttons at the top are **Apps** (back to the grid), **Keyboard** and **Back** (the
-app's own Back). For drags, turn on the pan button in the map strip. AnyAuto also works on the
-Android Auto dashboard: the app is drawn into the dashboard card.
+**Open**. AnyAuto's navigation bar runs down the left edge of the car screen, beside the app
+(⋮ → **Navigation bar side** puts it on the right, for right-hand-drive cars):
+
+- **Back:** the app's own Back.
+- **Apps:** back to the grid.
+- **Keyboard:** see Typing below.
+- **Close:** closes the app, like swiping it away in Recents. The next drive starts at the grid.
+- **Hide:** the app gets the whole width. The bar button at the top right of the car screen
+  brings the bar back.
+
+For drags, turn on the pan button in the map strip. AnyAuto also works on the Android Auto
+dashboard: the app is drawn into the dashboard card (without the bar).
 
 **Full screen:** the app uses the whole car screen, edge to edge, like Google Maps does (Android
-Auto rounds the corners a little). The buttons float over its top corner until they hide by
-themselves. To keep them out of the app's way, turn off ⋮ → **Full screen in
-the car**; the app then starts below them.
+Auto rounds the corners a little). The bar button is Android Auto's own: it floats over the
+app's top right corner until it hides by itself, and a tap on the screen shows it again. To keep
+it out of the app's way, turn off ⋮ → **Full screen in the car**; the app then starts below it.
 
 **Typing:** tap a text field and the keyboard opens on the car screen. The **Keyboard** button
 opens it for the selected text field, or closes it (it says so when no text field is selected).
@@ -116,7 +139,8 @@ directions and "navigate to" requests.
 - **The phone.** On many phones (Android 14, for example) the car screen runs on its own, and
   AnyAuto leaves the phone alone: lock it, put it away or use it as usual. Where the car screen
   would sleep with the phone (Android 17 on a Pixel, for example), AnyAuto keeps the phone awake
-  with its screen off. The power button still puts it to sleep, and the car screen then pauses
+  with its screen off. That's on purpose, not a crash: the Home screen and, on the first drives,
+  the car screen say so. The power button still puts it to sleep, and the car screen then pauses
   until you tap it. AnyAuto checks which case your phone is. When Android Auto stops showing
   AnyAuto, the phone goes back to how it was (asleep if AnyAuto woke it). If you move between the
   grid, the app and other car screens, AnyAuto waits 8 seconds before it lets go, so the phone

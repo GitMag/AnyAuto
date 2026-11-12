@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
 import android.graphics.Typeface;
@@ -45,6 +46,9 @@ import java.util.concurrent.TimeUnit;
  * instead: a glyph, a title and maybe a hint, rendered with a Canvas into a bitmap of the content
  * size and drawn as a second texture.
  *
+ * <p>The car's <b>navigation bar</b> (Back, Apps, Keyboard, Close, Hide) is a third texture, drawn
+ * into its own rect beside the content; {@link Mirror} hit-tests the taps with {@link #navButton}.
+ *
  * <p>All GL work runs on its own thread. {@link #attach} / {@link #detach} wait for it, because
  * the host may destroy the screen surface as soon as its callback returns.
  */
@@ -74,6 +78,16 @@ final class Compositor implements SurfaceTexture.OnFrameAvailableListener {
     // overlay kinds
     static final int NONE = 0, IDLE = 1, CONNECTING = 2, PROBLEM = 3;
 
+    // the navigation bar's buttons, top to bottom
+    static final int NAV_BACK = 0, NAV_APPS = 1, NAV_KEYBOARD = 2, NAV_CLOSE = 3, NAV_HIDE = 4;
+    private static final int[] NAV_ICONS = {R.drawable.ic_back, R.drawable.ic_apps, R.drawable.ic_keyboard,
+            R.drawable.ic_close, R.drawable.ic_chevron_left};
+    // Hide points to the screen edge the bar goes to
+    private static final int NAV_HIDE_RIGHT = R.drawable.ic_chevron_right;
+    private static final String[] NAV_LABELS = {"Back", "Apps", "Keyboard", "Close", "Hide"};
+    private static final int NAV_BG = 0xFF16171A;
+    private static final long NAV_PRESS_MS = 180;
+
     private static final String FRAGMENT =
             "#extension GL_OES_EGL_image_external : require\n"
                     + "precision mediump float;\n"
@@ -101,7 +115,16 @@ final class Compositor implements SurfaceTexture.OnFrameAvailableListener {
     private int surfaceW, surfaceH;
     private final Rect content = new Rect();
     private int program, aPos, aTex, uTexM, texture;
-    private int program2, aPos2, aTex2, uTexM2, overlayTex;
+    private int program2, aPos2, aTex2, uTexM2, overlayTex, navTex;
+    private final Rect nav = new Rect();
+    private boolean navAppOpen, navReady, navRight;
+    private int navSkip;
+    private int navPressed = -1;
+    private final Runnable navRelease = () -> {
+        navPressed = -1;
+        renderNav();
+        draw();
+    };
     private int dpi = 160;
     private int overlayKind = NONE;
     private String overlayTitle, overlayHint;
@@ -178,6 +201,53 @@ final class Compositor implements SurfaceTexture.OnFrameAvailableListener {
         });
     }
 
+    /**
+     * The navigation bar goes into this rect of the screen surface (empty: no bar), at the right
+     * edge or the left; its buttons start {@code skipTop} px below the rect's top (on the right,
+     * below Android Auto's own button). All buttons but Apps are dimmed while no app is open.
+     */
+    void nav(Rect r, int skipTop, boolean right, boolean appOpen) {
+        Rect copy = new Rect(r);
+        gl.post(() -> {
+            if (copy.equals(nav) && skipTop == navSkip && right == navRight && appOpen == navAppOpen) return;
+            nav.set(copy);
+            navSkip = skipTop;
+            navRight = right;
+            navAppOpen = appOpen;
+            renderNav();
+            draw();
+        });
+    }
+
+    /** Lights up a navigation button for a moment, so a tap on it shows. */
+    void navPressed(int button) {
+        gl.post(() -> {
+            gl.removeCallbacks(navRelease);
+            navPressed = button;
+            renderNav();
+            draw();
+            gl.postDelayed(navRelease, NAV_PRESS_MS);
+        });
+    }
+
+    /** The button under y in a bar of this rect, top to bottom, or -1. Same layout as renderNav. */
+    static int navButton(Rect bar, int skipTop, int dpi, float y) {
+        float pad = navPad(dpi);
+        float slot = (bar.height() - skipTop - 2 * pad) / NAV_ICONS.length;
+        if (slot <= 0) return -1;
+        int i = (int) Math.floor((y - bar.top - skipTop - pad) / slot);
+        return i < 0 || i >= NAV_ICONS.length ? -1 : i;
+    }
+
+    /** The bar's width for a screen: 72 dp, at most an eighth of the screen's width. */
+    static int navWidth(int screenW, int dpi) {
+        return Math.max(40, Math.min(Math.round(72 * dpi / 160f), screenW / 8));
+    }
+
+    private static float navPad(int dpi) {
+        return 8 * dpi / 160f;
+    }
+
     void release() {
         released = true;
         gl.post(() -> {
@@ -238,18 +308,24 @@ final class Compositor implements SurfaceTexture.OnFrameAvailableListener {
         aPos2 = GLES20.glGetAttribLocation(program2, "aPos");
         aTex2 = GLES20.glGetAttribLocation(program2, "aTex");
         uTexM2 = GLES20.glGetUniformLocation(program2, "uTexM");
-        GLES20.glGenTextures(1, t, 0);
-        overlayTex = t[0];
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, overlayTex);
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+        overlayTex = texture2D();
+        navTex = texture2D();
 
         texIn = new SurfaceTexture(texture);
         texIn.setDefaultBufferSize(1, 1);
         texIn.setOnFrameAvailableListener(this, gl);
         input = new Surface(texIn);
+    }
+
+    private static int texture2D() {
+        int[] t = new int[1];
+        GLES20.glGenTextures(1, t, 0);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, t[0]);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+        return t[0];
     }
 
     private EGLConfig chooseConfig(boolean recordable) {
@@ -279,6 +355,10 @@ final class Compositor implements SurfaceTexture.OnFrameAvailableListener {
             } else if (haveFrame) {
                 quadWith(program, aPos, aTex, uTexM, GLES11Ext.GL_TEXTURE_EXTERNAL_OES, texture, texM);
             }
+        }
+        if (!nav.isEmpty() && navReady) {
+            GLES20.glViewport(nav.left, surfaceH - nav.bottom, nav.width(), nav.height());
+            quadWith(program2, aPos2, aTex2, uTexM2, GLES20.GL_TEXTURE_2D, navTex, FLIP_Y);
         }
         EGL14.eglSwapBuffers(dpy, window);
     }
@@ -361,6 +441,65 @@ final class Compositor implements SurfaceTexture.OnFrameAvailableListener {
         GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, b, 0);
         b.recycle();
         overlayReady = true;
+    }
+
+    /**
+     * The navigation bar as a bitmap of its rect: a dark column with a hairline on the app's side,
+     * and five equal slots of glyph + label below the skipped top (the label only where a slot is
+     * tall enough). Sizes are px at 160 dpi, scaled by the surface dpi.
+     */
+    private void renderNav() {
+        navReady = false;
+        if (nav.isEmpty()) return;
+        int w = nav.width(), h = nav.height();
+        float s = dpi / 160f, pad = navPad(dpi);
+        float slot = (h - navSkip - 2 * pad) / NAV_ICONS.length;
+        if (slot <= 0) return;
+        int glyph = Math.round(Math.min(28 * s, slot * 0.45f));
+        TextPaint label = new TextPaint(TextPaint.ANTI_ALIAS_FLAG);
+        label.setTextSize(12 * s);
+        label.setTextAlign(android.graphics.Paint.Align.CENTER);
+        float labelGap = 4 * s;
+        Paint.FontMetrics fm = label.getFontMetrics();
+        float labelH = fm.descent - fm.ascent;
+        boolean labels = slot >= glyph + labelGap + labelH + 12 * s && label.measureText("Keyboard") <= w - 4 * s;
+
+        Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        Canvas cv = new Canvas(b);
+        cv.drawColor(NAV_BG);
+        Paint line = new Paint();
+        line.setColor(0x26FFFFFF);
+        int hair = Math.max(1, Math.round(s));
+        if (navRight) cv.drawRect(0, 0, hair, h, line);
+        else cv.drawRect(w - hair, 0, w, h, line);
+        Paint press = new Paint(Paint.ANTI_ALIAS_FLAG);
+        press.setColor(0x33FFFFFF);
+        for (int i = 0; i < NAV_ICONS.length; i++) {
+            boolean on = navAppOpen || i == NAV_APPS;
+            int fg = on ? 0xFFFFFFFF : 0x55FFFFFF;
+            float top = navSkip + pad + i * slot;
+            if (i == navPressed && on) {
+                float in = 6 * s;
+                cv.drawRoundRect(in, top + in / 2, w - in, top + slot - in / 2, 12 * s, 12 * s, press);
+            }
+            float block = glyph + (labels ? labelGap + labelH : 0);
+            float y = top + (slot - block) / 2f;
+            Drawable d = context.getDrawable(i == NAV_HIDE && navRight ? NAV_HIDE_RIGHT : NAV_ICONS[i]).mutate();
+            d.setTint(fg);
+            int gx = (w - glyph) / 2;
+            d.setBounds(gx, Math.round(y), gx + glyph, Math.round(y) + glyph);
+            d.draw(cv);
+            if (labels) {
+                label.setColor(on ? 0xCCFFFFFF : 0x55FFFFFF);
+                cv.drawText(NAV_LABELS[i], w / 2f, y + glyph + labelGap - fm.ascent, label);
+            }
+        }
+
+        makeCurrent(window != EGL14.EGL_NO_SURFACE ? window : pbuffer);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, navTex);
+        GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, b, 0);
+        b.recycle();
+        navReady = true;
     }
 
     private void dropWindow() {

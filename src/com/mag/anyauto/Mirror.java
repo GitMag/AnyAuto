@@ -31,6 +31,10 @@ import java.util.concurrent.TimeUnit;
  * area, else the whole surface. The display is sized to the content rect, and car coordinates
  * are moved into it before they reach {@link Touch}.
  *
+ * <p>On the car, AnyAuto's <b>navigation bar</b> (Back, Apps, Keyboard, Close, Hide) takes a band
+ * at the left (or, by the setting, the right) of the full-width view, beside the app; taps in it
+ * are AnyAuto's, not the app's.
+ *
  * <p>The display outlives the screen surface: without one (another app in front, the apps grid)
  * it is paused, and the app is still there when the surface comes back. {@link #release()}
  * closes the display; its tasks move back to the phone screen.
@@ -43,9 +47,21 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
     private static final long FIGHT_CHECK_MS = 10_000;
 
     public interface Listener {
-        /** Main thread: {@link #problem()} may have changed. */
+        /** Main thread: {@link #problem()} or the navigation bar setting may have changed. */
         void onMirrorChanged();
     }
+
+    /** What the car screen does for the navigation bar (main thread). */
+    public interface Nav {
+        /** The Apps button: show the apps grid. */
+        void apps();
+
+        /** A short message for the driver (a toast). */
+        void message(String text, boolean longer);
+    }
+
+    // drives on which the car says that the phone's dark screen is on purpose
+    private static final int DARK_TELL_TIMES = 3;
 
     /** What keeps the app off the screen: a short title and one sentence with the fix. */
     public static final class Problem {
@@ -85,6 +101,11 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
     private final Rect stable = new Rect(), visible = new Rect();
     private Rect forced;              // the preview's simulated dashboard card
     private final Rect content = new Rect();
+    private final Rect navBar = new Rect(); // the car's navigation bar, or empty
+    private int navSkip;                    // px at its top without buttons (under Android Auto's button)
+    private boolean navRight;
+    private volatile Nav nav;
+    private boolean darkTold;         // this drive was told that the phone's screen is dark on purpose
     private boolean hold;             // the car shows AnyAuto's apps grid
     private ComponentName app;        // what should be on the display
     private IDisplayService pushedTo; // the service the state below belongs to
@@ -190,15 +211,91 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
         io.post(() -> {
             app = c;
             launched = null;
-            sync();
+            relayout(); // a hidden navigation bar goes once an app is open
         });
+    }
+
+    /** The car screen's handler for the navigation bar's Apps button and messages. */
+    public void setNav(Nav n) {
+        nav = n;
+    }
+
+    /** Android Auto's own button: shows or hides the navigation bar. */
+    public void toggleNav() {
+        Prefs.setNavBar(context, !Prefs.navBar(context));
+        io.post(this::applyContent);
+        main.post(listener::onMirrorChanged);
     }
 
     // ---- input in screen-surface coordinates (the car's or the preview's)
 
     public void click(float x, float y) {
         io.post(() -> {
-            if (content.contains((int) x, (int) y)) touch.click(x - content.left, y - content.top);
+            if (navBar.contains((int) x, (int) y)) navTap(Compositor.navButton(navBar, navSkip, dpi, y));
+            else if (content.contains((int) x, (int) y)) touch.click(x - content.left, y - content.top);
+        });
+    }
+
+    /** A tap on the navigation bar (worker thread). All but Apps need an open app. */
+    private void navTap(int button) {
+        if (button < 0) return;
+        boolean open = launched != null;
+        if (!open && button != Compositor.NAV_APPS) return;
+        compositor.navPressed(button);
+        // like a finger on the app: wakes the phone again if the user had put it to sleep
+        if (car && pushedKeep) call(s -> s.keepRunning(true));
+        switch (button) {
+            case Compositor.NAV_BACK:
+                call(s -> s.key(KeyEvent.KEYCODE_BACK));
+                break;
+            case Compositor.NAV_APPS:
+                main.post(() -> {
+                    Nav n = nav;
+                    if (n != null) n.apps();
+                });
+                break;
+            case Compositor.NAV_KEYBOARD:
+                toggleKeyboard(r -> say(keyboardMessage(r), false));
+                break;
+            case Compositor.NAV_CLOSE:
+                closeApp();
+                break;
+            case Compositor.NAV_HIDE:
+                Prefs.setNavBar(context, false);
+                applyContent();
+                main.post(listener::onMirrorChanged);
+                break;
+        }
+    }
+
+    /**
+     * Closes the app on the display (its tasks are removed, as a swipe in Recents does) and
+     * leaves the display empty; the next drive starts at the apps grid.
+     */
+    public void closeApp() {
+        io.post(() -> {
+            ComponentName was = launched;
+            String[] r = {null};
+            call(s -> r[0] = s.closeApp());
+            Log.i(TAG, "close " + (was == null ? "-" : was.flattenToShortString()) + ": " + r[0]);
+            if (r[0] == null) return; // no service: nothing is shown anyway
+            if (!"ok".equals(r[0]) && !"none".equals(r[0])) {
+                say("Can't close the app: " + (r[0].startsWith("close: ") ? r[0].substring(7) : r[0]), false);
+                return;
+            }
+            app = null;
+            launched = null;
+            Prefs.clearLast(context);
+            relayout();
+            main.post(listener::onMirrorChanged);
+        });
+    }
+
+    private void say(String text, boolean longer) {
+        if (text == null) return;
+        main.post(() -> {
+            Nav n = nav;
+            if (n != null) n.message(text, longer);
         });
     }
 
@@ -348,6 +445,12 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
 
     // ------------------------------------------------------------------ worker thread
 
+    /** The navigation bar may come or go: lay out again, or just sync before the first surface. */
+    private void relayout() {
+        if (screenW > 0 && screenH > 0) applyContent();
+        else sync();
+    }
+
     private void contentChanged() {
         io.removeCallbacks(applyContent);
         io.postDelayed(applyContent, CONTENT_SETTLE_MS);
@@ -362,6 +465,32 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
         else if (!visible.isEmpty() && full.contains(visible)) r = visible;
         else r = full;
         if (r.isEmpty()) return;
+        Rect bar = new Rect();
+        int skip = 0;
+        boolean right = Prefs.navRight(context);
+        // full-width view only; with no app open there is nothing to cover, so the bar stays
+        if (car && (Prefs.navBar(context) || app == null) && r.width() >= screenW * 0.8f) {
+            int bw = Compositor.navWidth(screenW, dpi);
+            if (right) {
+                // Android Auto's own button floats at the top right: the buttons start below it,
+                // where the stable area starts (in full screen the bar itself goes to the top)
+                if (stable.isEmpty()) skip = Math.round(80 * dpi / 160f);
+                else if (stable.top > r.top) skip = stable.top - r.top;
+                bar.set(r.right - bw, r.top, r.right, r.bottom);
+                r = new Rect(r.left, r.top, r.right - bw, r.bottom);
+            } else {
+                bar.set(r.left, r.top, r.left + bw, r.bottom);
+                r = new Rect(r.left + bw, r.top, r.right, r.bottom);
+            }
+        }
+        if (!bar.equals(navBar) || skip != navSkip || right != navRight) {
+            navBar.set(bar);
+            navSkip = skip;
+            navRight = right;
+            Log.i(TAG, "navigation bar " + (bar.isEmpty() ? "hidden" : bar.toShortString()
+                    + (right ? " (right, buttons from +" + skip + ")" : " (left)")));
+        }
+        compositor.nav(navBar, navSkip, navRight, launched != null);
         if (!r.equals(content)) {
             content.set(r);
             Log.i(TAG, "content " + content.toShortString() + " of " + screenW + "x" + screenH);
@@ -443,11 +572,16 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
                 pushedH = h;
                 pushedDpi = dpi;
                 if (displayId < 0) {
-                    setProblem(new Problem("Can't make the car display", s.lastError()));
+                    setProblem(Shell.rootOnOldAndroid()
+                            ? new Problem("Shizuku runs as root",
+                                    "On Android 13 and older, start Shizuku with Wireless debugging instead.")
+                            : new Problem("Can't make the car display", s.lastError()));
                     return;
                 }
                 pushedKeyboard = null; // a new display, or a new size: say it again
                 Log.i(TAG, s.info());
+                // for the phone's Home screen: does this phone's screen go dark in the car?
+                Prefs.setPhoneGroup(context, s.phoneGroup());
             }
             // the car: where the setting says; the preview: on the phone, since a finger on the
             // phone takes the focus and would close a keyboard on the display (DisplayService)
@@ -469,6 +603,7 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
                 else if (carShowing == this) setCarShowing(null);
                 io.removeCallbacks(checkFights);
                 if (keep) io.postDelayed(checkFights, FIGHT_CHECK_MS);
+                if (keep) tellDark(s);
             }
             if (app != null && !app.equals(launched)) {
                 String r = s.launch(app);
@@ -478,13 +613,28 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
                 }
                 launched = app;
                 Log.i(TAG, "opened " + app.flattenToShortString() + " on display " + displayId);
+                compositor.nav(navBar, navSkip, navRight, true);
             }
+            if (launched == null) compositor.nav(navBar, navSkip, navRight, false);
             setProblem(null);
         } catch (DeadObjectException e) {
             lost(s);
         } catch (RemoteException e) {
             setProblem(new Problem("Can't reach the display service", String.valueOf(e)));
         }
+    }
+
+    /**
+     * The first few drives: the car says that the phone's dark screen is on purpose, once per
+     * drive, when this phone's screen does go dark (it shares the car display's group, and no
+     * setting keeps it on). New users otherwise take the black phone for a crash.
+     */
+    private void tellDark(IDisplayService s) throws RemoteException {
+        if (darkTold || Prefs.darkTold(context) >= DARK_TELL_TIMES) return;
+        if (s.phoneGroup() != 1 || Prefs.keepPhoneOn(context) || !Prefs.keyboardOnCar(context)) return;
+        darkTold = true;
+        Prefs.addDarkTold(context);
+        say("Your phone's screen is off on purpose while AnyAuto runs. It comes back when you leave AnyAuto.", true);
     }
 
     private String label(ComponentName c) {
@@ -533,7 +683,8 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
     /** What the surface shows when there is no app frame. */
     private void updateOverlay(Problem p) {
         if (p != null) {
-            compositor.overlay(Compositor.PROBLEM, p.title, null);
+            // the car shows the text in its own message box; the phone preview has only this
+            compositor.overlay(Compositor.PROBLEM, p.title, car ? null : p.text);
         } else if (pushedTo == null && Shell.state() == Shell.State.CONNECTING) {
             compositor.overlay(Compositor.CONNECTING, "Connecting to Shizuku…", null);
         } else if (app == null) {

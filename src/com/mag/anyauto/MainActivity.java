@@ -38,7 +38,7 @@ public final class MainActivity extends Activity implements Shell.Listener {
     static final String UNKNOWNAUTO = "com.mag.unknownauto";
     static final String UNKNOWNAUTO_RELEASES = "https://github.com/GitMag/UnknownAuto/releases/latest";
     private static final int MENU_HELP = 1, MENU_INSTALL = 2, MENU_KEYBOARD = 3, MENU_FULL = 4, MENU_PHONE_ON = 5,
-            MENU_AUTO_UPDATE = 6, MENU_CHECK_UPDATE = 7;
+            MENU_AUTO_UPDATE = 6, MENU_CHECK_UPDATE = 7, MENU_NAV_SIDE = 8;
 
     private LinearLayout cards;
     private TextView section, sectionCount;
@@ -147,11 +147,12 @@ public final class MainActivity extends Activity implements Shell.Listener {
         menu.add(0, MENU_PHONE_ON, 1, "Keep the phone's screen on").setCheckable(true)
                 .setChecked(Prefs.keepPhoneOn(this));
         menu.add(0, MENU_KEYBOARD, 2, "Keyboard");
-        menu.add(0, MENU_AUTO_UPDATE, 3, "Check for updates automatically").setCheckable(true)
+        menu.add(0, MENU_NAV_SIDE, 3, "Navigation bar side");
+        menu.add(0, MENU_AUTO_UPDATE, 4, "Check for updates automatically").setCheckable(true)
                 .setChecked(Prefs.autoUpdate(this));
-        menu.add(0, MENU_CHECK_UPDATE, 4, "Check for updates now");
-        menu.add(0, MENU_HELP, 5, "Help");
-        menu.add(0, MENU_INSTALL, 6, "Install for the car");
+        menu.add(0, MENU_CHECK_UPDATE, 5, "Check for updates now");
+        menu.add(0, MENU_HELP, 6, "Help");
+        menu.add(0, MENU_INSTALL, 7, "Install for the car");
         return true;
     }
 
@@ -201,6 +202,19 @@ public final class MainActivity extends Activity implements Shell.Listener {
                     .show();
             return true;
         }
+        if (item.getItemId() == MENU_NAV_SIDE) {
+            String[] choices = {"Left", "Right"};
+            new AlertDialog.Builder(this)
+                    .setTitle("Navigation bar on the car screen")
+                    .setSingleChoiceItems(choices, Prefs.navRight(this) ? 1 : 0, (d, which) -> {
+                        Prefs.setNavRight(this, which == 1);
+                        Mirror.settingsChanged();
+                        d.dismiss();
+                    })
+                    .setNegativeButton("Close", null)
+                    .show();
+            return true;
+        }
         if (item.getItemId() == MENU_HELP) {
             startActivity(new Intent(this, HelpActivity.class));
             return true;
@@ -229,11 +243,19 @@ public final class MainActivity extends Activity implements Shell.Listener {
         boolean onCar = Mirror.carShowing();
         if (onCar) {
             cards.addView(card(R.drawable.ic_car, "On the car screen",
-                    "The car is using the display. The phone stays awake with its screen off. Try is unavailable meanwhile."));
+                    Prefs.phoneGroup(this) == 0 || Prefs.keepPhoneOn(this)
+                            ? "The car is using the display. Try is unavailable meanwhile."
+                            : "The car is using the display. The phone stays awake with its screen off. Try is unavailable meanwhile."));
         }
         Shell.State st = Shell.state();
         switch (st) {
             case READY:
+                if (Shell.rootOnOldAndroid()) {
+                    cards.addView(card(R.drawable.ic_shell, "Shizuku runs as root",
+                            "On Android 13 and older, Android won't give root the car display. In the Shizuku app, start it with Wireless debugging instead.",
+                            Ui.filled(this, "Open Shizuku"), v -> openShizuku()));
+                    break;
+                }
                 cards.addView(slim(Ui.icon(this, R.drawable.ic_check, Ui.accent(this)), null, "Shizuku is running"));
                 break;
             case CONNECTING:
@@ -249,10 +271,7 @@ public final class MainActivity extends Activity implements Shell.Listener {
             case NOT_RUNNING:
                 cards.addView(card(R.drawable.ic_shell, "Shizuku isn't running",
                         "Start it in the Shizuku app: Wireless debugging, then Start. It stops at every reboot.",
-                        Ui.filled(this, "Open Shizuku"), v -> {
-                            Intent i = getPackageManager().getLaunchIntentForPackage(Shell.SHIZUKU_PACKAGE);
-                            if (i != null) startActivity(i);
-                        }));
+                        Ui.filled(this, "Open Shizuku"), v -> openShizuku()));
                 break;
             case OLD_SHIZUKU:
                 cards.addView(card(R.drawable.ic_shell, "Shizuku is too old",
@@ -292,6 +311,23 @@ public final class MainActivity extends Activity implements Shell.Listener {
             });
             LinearLayout buttons = c.findViewWithTag("buttons");
             buttons.addView(hide, 0);
+            cards.addView(c);
+        }
+
+        // before the first drives: a black phone is on purpose, not a crash
+        int group = Prefs.phoneGroup(this);
+        if (!onCar && group != 0 && !Prefs.keepPhoneOn(this) && !Prefs.darkNoteHidden(this)) {
+            View c = card(R.drawable.ic_phone_sleep,
+                    group == 1 ? "The phone's screen goes dark in the car" : "The phone's screen may go dark in the car",
+                    (group == 1 ? "On this phone, the car screen only runs while the phone is awake. So while"
+                            : "On some phones, the car screen only runs while the phone is awake. On those, while")
+                            + " the car shows AnyAuto, the phone stays awake with its screen off. That's on purpose, "
+                            + "not a crash: the screen comes back when you leave AnyAuto in the car. "
+                            + "To keep it on, turn on ⋮ → Keep the phone's screen on.",
+                    Ui.textButton(this, "Got it"), v -> {
+                        Prefs.hideDarkNote(this);
+                        refresh();
+                    });
             cards.addView(c);
         }
 
@@ -392,6 +428,11 @@ public final class MainActivity extends Activity implements Shell.Listener {
         } catch (ActivityNotFoundException e) {
             startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://shizuku.rikka.app/download/")));
         }
+    }
+
+    private void openShizuku() {
+        Intent i = getPackageManager().getLaunchIntentForPackage(Shell.SHIZUKU_PACKAGE);
+        if (i != null) startActivity(i);
     }
 
     static boolean isUnknownAutoInstalled(Context c) {

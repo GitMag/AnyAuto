@@ -42,6 +42,11 @@ public final class Headless extends BroadcastReceiver {
                     Log.i(TAG, "headless: keyboard button: " + s.toggleKeyboard());
                     return;
                 }
+                // --ez close true: the navigation bar's Close (removes the tasks on the display)
+                if (intent.getBooleanExtra("close", false)) {
+                    Log.i(TAG, "headless: close: " + s.closeApp());
+                    return;
+                }
                 if (intent.getBooleanExtra("stop", false)) {
                     s.close();
                     Log.i(TAG, "headless: display closed");
@@ -49,7 +54,7 @@ public final class Headless extends BroadcastReceiver {
                 }
                 int id = s.showHeadless(intent.getIntExtra("w", 1280), intent.getIntExtra("h", 480),
                         intent.getIntExtra("dpi", 160));
-                Log.i(TAG, "headless: " + (id < 0 ? s.lastError() : s.info()));
+                Log.i(TAG, "headless: " + (id < 0 ? s.lastError() : s.info() + ", phone group " + s.phoneGroup()));
                 String app = intent.getStringExtra("app");
                 ComponentName cn = app == null ? null : ComponentName.unflattenFromString(app);
                 if (id >= 0 && cn != null) Log.i(TAG, "headless: launch " + app + ": " + s.launch(cn));

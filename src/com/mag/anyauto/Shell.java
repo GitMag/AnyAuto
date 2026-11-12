@@ -4,6 +4,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -24,7 +25,7 @@ public final class Shell {
     static final String SHIZUKU_PACKAGE = "moe.shizuku.privileged.api";
     private static final int REQUEST = 4100;
     // bump whenever DisplayService changes, so Shizuku starts the new code instead of a running copy
-    private static final int SERVICE_VERSION = 13;
+    private static final int SERVICE_VERSION = 14;
 
     enum State { NO_SHIZUKU, NOT_RUNNING, OLD_SHIZUKU, NO_PERMISSION, CONNECTING, READY }
 
@@ -99,6 +100,22 @@ public final class Shell {
             return State.NOT_RUNNING;
         }
         return State.CONNECTING;
+    }
+
+    /**
+     * Shizuku was started with root, on Android 13 or older. The display service then runs as
+     * root, and Android 13 and older refuse root a virtual display: it names the shell's package,
+     * which isn't root's ("packageName must match the calling uid"). Android 14 lets root through.
+     * The service can't turn into the shell either: binder keeps the identity the process had
+     * when it opened /dev/binder. Shizuku has to be started with Wireless debugging (or adb).
+     */
+    static boolean rootOnOldAndroid() {
+        if (Build.VERSION.SDK_INT > 33) return false;
+        try {
+            return Shizuku.pingBinder() && Shizuku.getUid() == 0;
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     /** The bound service, or null; starts binding when Shizuku is ready for it. */

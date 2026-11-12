@@ -572,6 +572,57 @@ public final class DisplayService extends IDisplayService.Stub {
         return lastError;
     }
 
+    /**
+     * Removes every task on the display (IActivityTaskManager.removeTask, as a swipe in Recents
+     * does; the shell user has REMOVE_TASKS). The tasks are found with getTasks, whose parameters
+     * changed over the versions: (max) on 10, (max, filterOnlyVisibleRecents, keepIntentExtra) on
+     * 12, plus displayId on 13+. Each task's display is its TaskInfo.displayId (hidden field).
+     */
+    @Override
+    public synchronized String closeApp() {
+        if (display == null) return "no display";
+        try {
+            Object atm = Class.forName("android.app.ActivityTaskManager").getMethod("getService").invoke(null);
+            List<?> tasks = null;
+            for (Method m : atm.getClass().getMethods()) {
+                if (!m.getName().equals("getTasks")) continue;
+                Class<?>[] p = m.getParameterTypes();
+                Object[] a = new Object[p.length];
+                for (int i = 0; i < p.length; i++) {
+                    if (p[i] == int.class) a[i] = i == 0 ? 100 : displayId;
+                    else if (p[i] == boolean.class) a[i] = false;
+                }
+                tasks = (List<?>) m.invoke(atm, a);
+                break;
+            }
+            if (tasks == null) {
+                lastError = "no usable getTasks on " + atm.getClass().getName();
+                return lastError;
+            }
+            Method remove = atm.getClass().getMethod("removeTask", int.class);
+            java.lang.reflect.Field onDisplay = android.app.TaskInfo.class.getField("displayId");
+            int removed = 0;
+            for (Object t : tasks) {
+                android.app.TaskInfo info = (android.app.TaskInfo) t;
+                if (onDisplay.getInt(info) != displayId) continue;
+                boolean ok = (Boolean) remove.invoke(atm, info.taskId);
+                Log.i(TAG, "close: task " + info.taskId + " (" + (info.baseActivity == null ? "?"
+                        : info.baseActivity.flattenToShortString()) + ") " + (ok ? "removed" : "not removed"));
+                if (ok) removed++;
+            }
+            return removed > 0 ? "ok" : "none";
+        } catch (Throwable t) {
+            lastError = "close: " + describe(t);
+            Log.w(TAG, lastError, t);
+            return lastError;
+        }
+    }
+
+    @Override
+    public synchronized int phoneGroup() {
+        return display == null ? -1 : ownGroup ? 0 : 1;
+    }
+
     @Override
     public void touch(MotionEvent event) {
         int id = displayId;

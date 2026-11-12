@@ -25,14 +25,17 @@ import com.mag.anyauto.Prefs;
 import com.mag.anyauto.R;
 
 /**
- * The car screen: a NavigationTemplate whose surface the virtual display draws into, with Apps
- * and Back in the action strip and the pan button (which enables drags) in the map action strip.
- * When the app cannot be shown, the reason goes in the template's message card.
+ * The car screen: a NavigationTemplate whose surface the virtual display draws into. The controls
+ * are AnyAuto's own navigation bar on the surface (Back, Apps, Keyboard, Close, Hide; drawn by
+ * the compositor, tapped through {@link Mirror}). Android Auto's action strip, which floats over
+ * the app and must hold at least one button, has only the one that shows or hides that bar; the
+ * map action strip has the pan button, which enables drags. When the app cannot be shown, the
+ * reason goes in the template's message card.
  *
  * <p>The surface callbacks arrive on the main thread. They are forwarded to {@link Mirror}; the
  * gestures are logged ({@code adb logcat -s AnyAuto.car}) to check what the host sends.
  */
-final class MirrorScreen extends Screen implements SurfaceCallback {
+final class MirrorScreen extends Screen implements SurfaceCallback, Mirror.Nav {
     private static final String TAG = "AnyAuto.car";
     private final Mirror mirror;
 
@@ -40,10 +43,12 @@ final class MirrorScreen extends Screen implements SurfaceCallback {
         super(c);
         this.mirror = mirror;
         c.getCarService(AppManager.class).setSurfaceCallback(this);
+        mirror.setNav(this);
         getLifecycle().addObserver(new DefaultLifecycleObserver() {
             @Override
             public void onDestroy(@NonNull LifecycleOwner owner) {
                 c.getCarService(AppManager.class).setSurfaceCallback(null);
+                mirror.setNav(null);
             }
         });
     }
@@ -52,17 +57,8 @@ final class MirrorScreen extends Screen implements SurfaceCallback {
     @Override
     public Template onGetTemplate() {
         ActionStrip strip = new ActionStrip.Builder()
-                .addAction(new Action.Builder().setIcon(icon(R.drawable.ic_apps))
-                        .setOnClickListener(() -> getScreenManager().push(new AppsScreen(getCarContext(), mirror)))
-                        .build())
-                .addAction(new Action.Builder().setIcon(icon(R.drawable.ic_keyboard))
-                        .setOnClickListener(() -> mirror.toggleKeyboard(r -> {
-                            String m = Mirror.keyboardMessage(r);
-                            if (m != null) CarToast.makeText(getCarContext(), m, CarToast.LENGTH_SHORT).show();
-                        }))
-                        .build())
-                .addAction(new Action.Builder().setIcon(icon(R.drawable.ic_back))
-                        .setOnClickListener(mirror::back)
+                .addAction(new Action.Builder().setIcon(icon(R.drawable.ic_nav_bar))
+                        .setOnClickListener(mirror::toggleNav)
                         .build())
                 .build();
         NavigationTemplate.Builder b = new NavigationTemplate.Builder()
@@ -76,6 +72,18 @@ final class MirrorScreen extends Screen implements SurfaceCallback {
                     .setImage(icon(R.drawable.ic_phone_alert)).build());
         }
         return b.build();
+    }
+
+    // ------------------------------------------------------------------ Mirror.Nav (main thread)
+
+    @Override
+    public void apps() {
+        getScreenManager().push(new AppsScreen(getCarContext(), mirror));
+    }
+
+    @Override
+    public void message(String text, boolean longer) {
+        CarToast.makeText(getCarContext(), text, longer ? CarToast.LENGTH_LONG : CarToast.LENGTH_SHORT).show();
     }
 
     private CarIcon icon(int res) {
