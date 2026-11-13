@@ -23,8 +23,8 @@ JAR=$SDK/platforms/android-$COMPILE_SDK/android.jar
 
 APP_ID=com.mag.anyauto
 TARGET_SDK=35
-VERSION_CODE=8
-VERSION_NAME=0.8
+VERSION_CODE=9
+VERSION_NAME=0.9
 APK=anyauto.apk
 
 if [ "$1" = "clean" ]; then rm -rf build $APK; echo "removed build/"; exit 0; fi

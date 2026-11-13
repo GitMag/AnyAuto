@@ -18,6 +18,12 @@ public final class Headless extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context c, Intent intent) {
+        // --ez knob false: forget that a car had a knob (after testing on a rotary desktop head unit)
+        if (intent.hasExtra("knob") && !intent.getBooleanExtra("knob", true)) {
+            Prefs.forgetCarKnob(c);
+            Log.i(TAG, "headless: knob car forgotten");
+            return;
+        }
         Shell.init(c);
         PendingResult result = goAsync();
         new Thread(() -> {

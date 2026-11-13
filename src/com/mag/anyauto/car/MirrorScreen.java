@@ -3,6 +3,7 @@ package com.mag.anyauto.car;
 import android.graphics.Rect;
 import android.util.Log;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.car.app.AppManager;
 import androidx.car.app.CarContext;
@@ -29,8 +30,11 @@ import com.mag.anyauto.R;
  * are AnyAuto's own navigation bar on the surface (Back, Apps, Keyboard, Close, Hide; drawn by
  * the compositor, tapped through {@link Mirror}). Android Auto's action strip, which floats over
  * the app and must hold at least one button, has only the one that shows or hides that bar; the
- * map action strip has the pan button, which enables drags. When the app cannot be shown, the
- * reason goes in the template's message card.
+ * map action strip has the pan button, which only cars without a touch screen show: it starts
+ * AnyAuto's pointer for the knob or touchpad ({@link Mirror#panMode}). Once a car has used it,
+ * the action strip has Apps too, since the knob can reach Android Auto's buttons but not
+ * AnyAuto's bar without the pointer. The car's Back button is the app's Back. When the app cannot
+ * be shown, the reason goes in the template's message card.
  *
  * <p>The surface callbacks arrive on the main thread. They are forwarded to {@link Mirror}; the
  * gestures are logged ({@code adb logcat -s AnyAuto.car}) to check what the host sends.
@@ -44,6 +48,15 @@ final class MirrorScreen extends Screen implements SurfaceCallback, Mirror.Nav {
         this.mirror = mirror;
         c.getCarService(AppManager.class).setSurfaceCallback(this);
         mirror.setNav(this);
+        // the car's own Back button (knob cars, some steering wheels): the app's Back. Only while
+        // this screen is on top; the apps grid keeps its own Back
+        c.getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                Log.d(TAG, "back");
+                mirror.back();
+            }
+        });
         getLifecycle().addObserver(new DefaultLifecycleObserver() {
             @Override
             public void onDestroy(@NonNull LifecycleOwner owner) {
@@ -56,15 +69,22 @@ final class MirrorScreen extends Screen implements SurfaceCallback, Mirror.Nav {
     @NonNull
     @Override
     public Template onGetTemplate() {
-        ActionStrip strip = new ActionStrip.Builder()
-                .addAction(new Action.Builder().setIcon(icon(R.drawable.ic_nav_bar))
-                        .setOnClickListener(mirror::toggleNav)
-                        .build())
-                .build();
+        ActionStrip.Builder strip = new ActionStrip.Builder();
+        if (Prefs.carKnob(getCarContext())) {
+            strip.addAction(new Action.Builder().setIcon(icon(R.drawable.ic_apps))
+                    .setOnClickListener(this::apps)
+                    .build());
+        }
+        strip.addAction(new Action.Builder().setIcon(icon(R.drawable.ic_nav_bar))
+                .setOnClickListener(mirror::toggleNav)
+                .build());
         NavigationTemplate.Builder b = new NavigationTemplate.Builder()
-                .setActionStrip(strip)
+                .setActionStrip(strip.build())
                 .setMapActionStrip(new ActionStrip.Builder().addAction(Action.PAN).build())
-                .setPanModeListener(on -> Log.d(TAG, "pan mode " + on));
+                .setPanModeListener(on -> {
+                    Log.d(TAG, "pan mode " + on);
+                    mirror.panMode(on);
+                });
         // problems only: a title and one sentence with the fix
         Mirror.Problem p = mirror.problem();
         if (p != null) {

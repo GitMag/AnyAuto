@@ -7,12 +7,12 @@
 
 AnyAuto puts **ordinary phone apps on the Android Auto screen**: a browser, a video app,
 Settings, or anything else with a launcher icon. You don't change the apps. AnyAuto runs them
-on a car-sized virtual display, draws that display onto the car screen, and sends the car's
-taps, drags, flings and pinches back to the app as touches.
+on a car-sized virtual display and draws it onto the car screen. Touch screens work as you'd
+expect, and cars with a rotary knob or a touchpad get a pointer.
 
 It uses [Shizuku](https://shizuku.rikka.app/), so you don't need root or a computer in the
-car. No account, no analytics. The only thing it does online is look for a new version on
-GitHub when you open it, and you can turn that off.
+car. No account, no analytics. The only thing it does online is check GitHub for a new version
+when you open it, and you can turn that off.
 
 **[Download the APK](https://github.com/GitMag/AnyAuto/releases/latest)** from the latest release.
 
@@ -21,195 +21,139 @@ GitHub when you open it, and you can turn that off.
 <p align="center"><em>YouTube on the Android Auto screen, with AnyAuto's navigation bar at the left.
 Video: <a href="https://peach.blender.org/">Big Buck Bunny</a> © Blender Foundation, CC BY 3.0.</em></p>
 
-## Screenshots
-
 <p align="center">
   <img src="docs/screenshots/phone-home.png" alt="AnyAuto's home screen: Shizuku is running, seven apps chosen for the car, each with a Try button" width="260">
   &nbsp;
   <img src="docs/screenshots/phone-picker.png" alt="Choose apps: search at the top, the apps in the car ticked, other apps below" width="260">
 </p>
 
-<p align="center"><em>Home: the apps you've chosen for the car. Choose apps: tick the apps to show in the car.</em></p>
-
 <p align="center">
   <img src="docs/screenshots/car-app.png" alt="Firefox showing a Wikipedia page on the Android Auto screen, with AnyAuto's navigation bar at the left" width="400">
   &nbsp;
-  <img src="docs/screenshots/car-video-hidden.png" alt="The same car screen with the navigation bar hidden: the video fills the whole width" width="400">
+  <img src="docs/screenshots/car-dashboard.png" alt="Android Auto's dashboard with the app in AnyAuto's card on the left and the media card on the right" width="400">
 </p>
 
-<p align="center"><em>A browser beside the navigation bar (other tabs blurred). Hide gives the app the whole
-width; the button at the top right brings the bar back.</em></p>
-
-<p align="center"><img src="docs/screenshots/car-dashboard.png" alt="Android Auto's dashboard with the app in AnyAuto's card on the left and the media card on the right" width="800"></p>
-
-<p align="center"><em>On the Android Auto dashboard, next to the media card (blurred here).</em></p>
-
-<p align="center"><img src="docs/screenshots/phone-preview.png" alt="Try: Chrome at car size on the phone, with Close, Direct, Card, Keyboard and Back on a rail at the right" width="800"></p>
-
-<p align="center"><em>Try: an app at car size on the phone, with the same display and gestures as the car.</em></p>
+<p align="center"><em>The apps you chose, a browser on the car screen, and AnyAuto on the Android Auto dashboard.</em></p>
 
 ## What you need
 
 - An Android phone with Android 10 or newer.
-- **Shizuku**, installed and running. On Android 11 and newer it starts on the phone itself.
-  On Android 10 it needs a computer after every reboot. On a rooted phone with Android 13 or
-  older, start Shizuku with Wireless debugging (or adb), not with root: Android 13 and older
-  won't let root make the car display.
-- **[UnknownAuto](https://github.com/GitMag/UnknownAuto)** to install AnyAuto for the car.
-  Android Auto runs only car apps that were installed from Google Play, and UnknownAuto
-  installs an APK so that it counts as a Play install. The desktop head unit doesn't check
-  this, so a plain `adb install` is enough there.
+- **[Shizuku](https://shizuku.rikka.app/)**, installed and running. On Android 11 and newer it
+  starts on the phone itself; Android 10 needs a computer after every reboot. On a rooted phone
+  with Android 13 or older, start Shizuku with Wireless debugging, not with root.
+- **[UnknownAuto](https://github.com/GitMag/UnknownAuto)**. Android Auto only runs car apps
+  installed from Google Play, and UnknownAuto installs AnyAuto so that it counts as one.
 
-## Install
+## Install and set up
 
-1. Download **AnyAuto-<version>.apk** from the
+1. Download **AnyAuto-&lt;version&gt;.apk** from the
    [latest release](https://github.com/GitMag/AnyAuto/releases/latest) on the phone.
-2. Open UnknownAuto, tap **Load APK or XAPK…**, pick the APK and tap **Install**. For the
-   desktop head unit, a normal install is enough.
-3. Add AnyAuto to Android Auto's launcher (Android Auto settings → *Customize launcher*).
+2. Open UnknownAuto, tap **Load APK or XAPK…**, pick the APK and tap **Install**.
+3. Start Shizuku: follow *Set up Shizuku* in
+   [UnknownAuto's README](https://github.com/GitMag/UnknownAuto#set-up-shizuku-once). No
+   computer is needed, but Shizuku has to be started again after every reboot.
+4. Open AnyAuto, tap **Allow** on the Shizuku card and choose **Allow all the time**.
+5. Tap **Choose apps** and tick the apps you want in the car.
+6. If AnyAuto isn't in Android Auto's launcher, add it under Android Auto settings →
+   *Customize launcher*.
 
-**Updates:** when you open AnyAuto, it looks for a new release on GitHub (at most once an hour),
-downloads it and checks that it's really AnyAuto, newer and signed with the same key. The Home
-screen then shows *AnyAuto x.y is ready*: tap **Update**, then **Install** in UnknownAuto, so
-Android Auto keeps accepting AnyAuto. Nothing runs in the background. Turn it off with
-⋮ → **Check for updates automatically**, or check by hand with ⋮ → **Check for updates now**.
+AnyAuto's home screen shows a card whenever something still needs doing.
 
-Or build it yourself with the plain Android SDK tools (no Gradle; build-tools 35 and the
-android-35 platform):
-
-```
-./build.sh            # build anyauto.apk
-./build.sh install    # build, adb install -r, then open it (ANDROID_SERIAL picks the device)
-```
-
-The first build downloads the libraries (the Car App Library and the Shizuku API) into
-`libs/` and creates a local signing key in `keys/`. An APK you build yourself is signed with
-your own key, so it can't update the release APK: uninstall that one first.
-
-## Set up (once)
-
-1. **Start Shizuku.** Follow *Set up Shizuku* in
-   [UnknownAuto's README](https://github.com/GitMag/UnknownAuto#set-up-shizuku-once). You
-   pair the phone with itself over Wireless debugging, and no computer is needed. Android
-   stops Shizuku at every reboot, so you have to start it again after one.
-2. **Allow AnyAuto.** Open AnyAuto and tap **Allow** on the Shizuku card, then choose
-   **Allow all the time**.
-3. **Choose apps.** Tap **Choose apps** at the bottom and tick the apps you want in the car.
-
-AnyAuto's home screen shows a card whenever something still needs doing: Shizuku missing,
-stopped or not allowed, or AnyAuto not installed for the car.
+**Updates:** when you open AnyAuto, it checks GitHub for a new release. The home screen then
+shows *AnyAuto x.y is ready*: tap **Update**, then **Install** in UnknownAuto. To turn this off,
+use ⋮ → **Check for updates automatically**.
 
 ## Use
 
-**On the phone:** **Try** next to a chosen app opens it at car size on the phone. It is a
-landscape preview with the same display and gesture handling as the car. The rail on the right
-has **Close**, **Direct** (raw touches instead of car gestures), **Card** (the size of the
-dashboard card), **Keyboard** and **Back**. The ⋮ menu has the settings and **Help**.
+**On the phone:** **Try** next to an app opens it at car size on the phone, so you can check it
+before a drive. The ⋮ menu has the settings and **Help**.
 
-**In the car:** open AnyAuto and pick an app from the grid. The app you have open is marked
-**Open**. AnyAuto's navigation bar runs down the left edge of the car screen, beside the app
-(⋮ → **Navigation bar side** puts it on the right, for right-hand-drive cars):
+**In the car:** open AnyAuto and pick an app. AnyAuto's navigation bar runs down the side of the
+car screen:
 
-- **Back:** the app's own Back.
-- **Apps:** back to the grid.
-- **Keyboard:** see Typing below.
-- **Close:** closes the app, like swiping it away in Recents. The next drive starts at the grid.
-- **Hide:** the app gets the whole width. The bar button at the top right of the car screen
-  brings the bar back.
+- **Back:** the app's Back.
+- **Apps:** pick another app.
+- **Keyboard:** opens or closes the keyboard for the selected text field. Tapping a text field
+  opens it too.
+- **Close:** closes the app, like swiping it away in Recents.
+- **Hide:** the app gets the whole width. The button at the top right brings the bar back.
 
-For drags, turn on the pan button in the map strip. AnyAuto also works on the Android Auto
-dashboard: the app is drawn into the dashboard card (without the bar).
+Settings in ⋮: the bar on the left or right, full screen, the keyboard on the car screen or the
+phone, and keeping the phone's screen on.
 
-**Full screen:** the app uses the whole car screen, edge to edge, like Google Maps does (Android
-Auto rounds the corners a little). The bar button is Android Auto's own: it floats over the
-app's top right corner until it hides by itself, and a tap on the screen shows it again. To keep
-it out of the app's way, turn off ⋮ → **Full screen in the car**; the app then starts below it.
+### Cars without a touch screen
 
-**Typing:** tap a text field and the keyboard opens on the car screen. The **Keyboard** button
-opens it for the selected text field, or closes it (it says so when no text field is selected).
-To type on the phone instead, choose ⋮ → **Keyboard** → **On the phone**: the phone's screen
-then stays on while AnyAuto is on the car screen. The Keyboard button needs Android 11 or newer.
+With a rotary knob (such as BMW's iDrive) or a touchpad, select Android Auto's pan button
+(✥, bottom right) and press it. A ring appears on the app:
 
-AnyAuto is listed as a navigation app because that is the only Android Auto category that
-gets the whole car screen to draw on. It never starts navigation, so Google Maps keeps
-directions and "navigate to" requests.
+- **Move:** push the knob, or slide on the touchpad. Quick pushes the same way go further.
+- **Click:** press the knob. For the next click, press the pan button again.
+- **Scroll:** push past the top or bottom edge.
+- **AnyAuto's bar:** push the ring into the bar and it lands on a button; up and down go from
+  button to button.
+- **Back:** the car's Back button. Android Auto's buttons at the top right also get **Apps**.
 
-## While an app is on the car screen
+After 10 seconds without the knob, the ring goes away. Pressing the pan button then clicks
+nothing; press it again to get the ring back.
 
-- **The phone.** On many phones (Android 14, for example) the car screen runs on its own, and
-  AnyAuto leaves the phone alone: lock it, put it away or use it as usual. Where the car screen
-  would sleep with the phone (Android 17 on a Pixel, for example), AnyAuto keeps the phone awake
-  with its screen off. That's on purpose, not a crash: the Home screen and, on the first drives,
-  the car screen say so. The power button still puts it to sleep, and the car screen then pauses
-  until you tap it. AnyAuto checks which case your phone is. When Android Auto stops showing
-  AnyAuto, the phone goes back to how it was (asleep if AnyAuto woke it). If you move between the
-  grid, the app and other car screens, AnyAuto waits 8 seconds before it lets go, so the phone
-  doesn't keep lighting up.
-- **Phones that won't stay dark:** some phones (a Samsung on One UI 9 was reported) turn their
-  screen straight back on, or go to sleep, when AnyAuto turns it off. AnyAuto notices within a
-  few seconds and stops turning it off, so the screen doesn't flicker, and it turns on
-  ⋮ → **Keep the phone's screen on** so later drives skip the dark screen on that phone.
-- **Using the phone at the same time:** turn on ⋮ → **Keep the phone's screen on**. Touching the
-  phone moves Android's focus to it, so a keyboard open on the car screen closes.
-- **Apps on the car screen skip the phone's lock,** like Android Auto's own apps. Dark doesn't
-  mean locked: if the phone was unlocked, it stays unlocked.
-- **Some windows show black.** Apps that protect their windows show black on the car screen.
-  Examples are banking apps, DRM video (Netflix and other streaming services) and Chrome
-  incognito tabs. Non-DRM video, such as YouTube, works.
-- **Portrait-only apps** (many games and messaging apps) show upright in a column in the
-  middle of the car screen, at full height. The car screen can't turn, so AnyAuto keeps its
-  display landscape whatever the app asks for.
-- **One car display:** **Try** is unavailable while AnyAuto is on the car screen.
+## Good to know
+
+- **The phone's screen:** on many phones the car screen runs on its own, and you can use the
+  phone as usual. On some (Android 17 on a Pixel, for example) the car screen would sleep with
+  the phone, so AnyAuto keeps the phone awake with its screen off. That's on purpose, and the
+  phone goes back to normal when you leave AnyAuto. To use the phone meanwhile, turn on
+  ⋮ → **Keep the phone's screen on**.
+- **Apps on the car screen skip the phone's lock,** like Android Auto's own apps.
+- **Some apps show black:** apps that protect their windows, such as banking apps, Netflix and
+  other DRM video, and Chrome incognito tabs. YouTube works.
+- **Portrait-only apps** show upright in a column in the middle of the car screen.
+- **AnyAuto is listed as a navigation app** because only those get the whole car screen. It
+  never starts navigation, so Google Maps keeps your directions.
 
 **Drive safely.** AnyAuto doesn't lock anything while the car is moving. Use video and other
-distracting apps only when the car is parked. Follow the traffic laws where you drive.
+distracting apps only when the car is parked, and follow the traffic laws where you drive.
 
 ## How it works
 
 ```
 Android Auto (car screen)                AnyAuto app process              Shizuku process (shell user)
  NavigationTemplate surface ──Surface──▶ MirrorScreen ─▶ Mirror ──AIDL──▶ DisplayService
- onClick/onScroll/onFling/onScale ─────▶ Touch (gestures → MotionEvents) ─▶ inject into the display
+ taps, drags, flings, pinches, knob ───▶ Touch / pointer → MotionEvents ─▶ inject into the display
                                                                           VirtualDisplay (trusted, public,
                                                                           always unlocked, own focus)
                                                                           └─ any app, started on it
-                                                                          PhonePower: phone awake, panel off
  Compositor (GL): the display's frames → the visible part of the car surface
 ```
 
-- **Shizuku:** only the shell user (or the system) can create a *trusted* virtual display
-  that other apps may start on, and inject input into it. scrcpy's `--new-display` works the
-  same way. Shizuku runs AnyAuto's `DisplayService` with the shell user's rights, on the phone
-  itself.
-- **No video encoding:** the car's Surface goes over binder to the Shizuku process, and the
-  display draws into it there, so frames are never copied or encoded. An app that is already
-  open on the phone moves to the car display.
-- **Gestures (`Touch`):** Android Auto doesn't give a navigation app raw touches. It gives a tap
-  position, scroll *distances*, a fling velocity and pinch steps, and `Touch` rebuilds touch
-  streams from them. A drag starts in the middle of the visible area, first moves past the
-  touch slop so no distance is lost, and ends 150 ms after the last step or at the screen edge.
-- **Fitting the car screen (`Compositor`):** Android Auto shows only part of a navigation app's
-  surface: the dashboard or launcher card, or everything below the action strip. The display
-  draws into a texture, and OpenGL draws each frame into the car's stable area. The rest stays
-  black. The display is resized to that area, and car coordinates are shifted to match.
-- **Keyboard on the car screen:** Android opens a virtual display's keyboard on the phone by
-  default. AnyAuto sets the display's keyboard policy to *local*
-  (`IWindowManager.setDisplayImePolicy`), like scrcpy's `--display-ime-policy local`. The
-  Keyboard button reads the keyboard state through accessibility, connected only for that
-  moment, then sends Back or taps the selected text field.
-- **The phone's screen (`PhonePower`):** a virtual display sleeps with its display group.
-  AnyAuto checks the group after making the display. If it has a group of its own (Android 14,
-  for example), only that group is kept awake (a wake lock for that display) and the phone is
-  left alone. On Android 17 builds that support desktop mode, every virtual display is put in the
-  phone's group. There AnyAuto holds a wake lock and powers off only the phone's own panel
-  (`IDisplayManager.requestDisplayPower`), and turns it off again whenever the system turns it
-  back on.
+- **Shizuku** gives AnyAuto's `DisplayService` the shell user's rights, which it needs to make a
+  *trusted* virtual display that other apps can start on, and to inject input into it (like
+  scrcpy's `--new-display`).
+- **No video encoding:** the display draws straight into Android Auto's surface, through OpenGL,
+  into the part of the car screen you can see.
+- **Input:** Android Auto gives a navigation app gestures, not raw touches (a tap point, scroll
+  distances, flings and pinch steps), and AnyAuto turns them back into touches. A knob or
+  touchpad only reaches the app in Android Auto's pan mode, so AnyAuto draws its own pointer
+  there.
+- **Keyboard:** the display's keyboard policy is *local*, so the keyboard opens on the car
+  screen.
+- **The phone's screen:** where the virtual display shares the phone's display group, AnyAuto
+  keeps the phone awake and powers off only the phone's own panel.
 
-## Source
+## Build
 
-`src/com/mag/anyauto/` holds the phone app and the Shizuku service, and
-`src/com/mag/anyauto/car/` the Android Auto side. Logs:
-`adb logcat -s AnyAuto AnyAuto.shell AnyAuto.car`.
+With the plain Android SDK tools (no Gradle; build-tools 35 and the android-35 platform):
+
+```
+./build.sh            # build anyauto.apk
+./build.sh install    # build, adb install -r, then open it (ANDROID_SERIAL picks the device)
+```
+
+The first build downloads the libraries into `libs/` and creates a signing key in `keys/`. An APK
+you build yourself has your own key, so it can't update the release APK: uninstall that first.
+The desktop head unit doesn't need UnknownAuto; a plain `adb install` is enough there.
+
+`src/com/mag/anyauto/` holds the phone app and the Shizuku service, `src/com/mag/anyauto/car/`
+the Android Auto side. Logs: `adb logcat -s AnyAuto AnyAuto.shell AnyAuto.car`.
 
 ## Support
 

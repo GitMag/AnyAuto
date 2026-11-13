@@ -9,6 +9,7 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.RemoteException;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -34,6 +35,20 @@ import java.util.concurrent.TimeUnit;
  * <p>On the car, AnyAuto's <b>navigation bar</b> (Back, Apps, Keyboard, Close, Hide) takes a band
  * at the left (or, by the setting, the right) of the full-width view, beside the app; taps in it
  * are AnyAuto's, not the app's.
+ *
+ * <p>Cars without a touch screen (a rotary knob, a touchpad) get the <b>pointer</b>. Their only way
+ * into the surface is Android Auto's pan mode: the pan button (which touch screens don't show)
+ * turns it on, a nudge of the knob then arrives as a scroll of a fixed distance (75 px on the
+ * desktop head unit) and a touchpad as finger distances; turning the knob sends nothing, and a
+ * press of the knob just ends pan mode (the car's Back does not). So in pan mode the pointer
+ * moves, pushing on against an edge scrolls the app (mouse-wheel events), and the end of pan mode
+ * is a tap at the pointer, on the app or on the navigation bar. On the bar the pointer goes from
+ * button to button. Pressing the pan button again brings the pointer back where it was.
+ *
+ * <p>Android Auto doesn't end pan mode when the user goes idle (10 s): it only hides its own
+ * buttons, nudges then move the knob's focus instead, and the next press of the pan button ends
+ * the pan mode that is still on. So after {@value #PAN_IDLE_MS} ms without the knob the pointer
+ * hides, and that press doesn't tap.
  *
  * <p>The display outlives the screen surface: without one (another app in front, the apps grid)
  * it is paused, and the app is still there when the surface comes back. {@link #release()}
@@ -62,6 +77,29 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
 
     // drives on which the car says that the phone's dark screen is on purpose
     private static final int DARK_TELL_TIMES = 3;
+
+    // the pointer (knob and touchpad cars), sizes in dp: a nudge moves it one step, quick nudges
+    // the same way up to POINTER_MAX_SPEED steps; at most a 48 dp touch target apart, so any
+    // button can be reached
+    private static final float POINTER_STEP_DP = 32;
+    private static final int POINTER_MAX_SPEED = 4;
+    private static final long POINTER_ACCEL_MS = 600;
+    // a knob's nudge: along one axis, at least this far (touchpad finger distances are not)
+    private static final float NUDGE_MIN_DP = 30;
+    // a touchpad finger pushing this far past an edge scrolls once
+    private static final float EDGE_PUSH_DP = 48;
+    // an edge push scrolls this share of the app's height (or width)
+    private static final float SCROLL_SHARE = 0.45f;
+    // a press ends pan mode; wait this long before the tap, so leaving the screen cancels it
+    private static final long PAN_CLICK_MS = 150;
+    private static final long POINTER_HIDE_MS = 2000;
+    // Android Auto's own idle time: after it, the end of pan mode is not a click
+    private static final long PAN_IDLE_MS = 10_000;
+    // the pointer keeps this far inside the screen, so its dot stays visible
+    private static final float POINTER_INSET_DP = 4;
+    // drives on which the car explains the pointer
+    private static final int POINTER_TELL_TIMES = 3;
+    private static final int UP = 0, DOWN = 1, LEFT = 2, RIGHT = 3;
 
     /** What keeps the app off the screen: a short title and one sentence with the fix. */
     public static final class Problem {
@@ -106,6 +144,16 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
     private boolean navRight;
     private volatile Nav nav;
     private boolean darkTold;         // this drive was told that the phone's screen is dark on purpose
+    private boolean panning;          // Android Auto's pan mode: knob and touchpad move the pointer
+    private boolean panTouched;       // a touch-screen tap came during this pan mode: no click at its end
+    private boolean panIdle;          // no knob for PAN_IDLE_MS: Android Auto went idle, no click at the end
+    private boolean knobFound;        // pan mode showed this drive that the car has a knob or touchpad
+    private boolean pointerTold;      // this drive explained the pointer
+    private float px = -1, py = -1;   // the pointer in screen-surface pixels (-1: not placed yet)
+    private boolean pointerShown;
+    private int lastDir = -1, streak;
+    private long lastNudge;
+    private float pushX, pushY;       // a touchpad finger's distance past the edge
     private boolean hold;             // the car shows AnyAuto's apps grid
     private ComponentName app;        // what should be on the display
     private IDisplayService pushedTo; // the service the state below belongs to
@@ -188,6 +236,11 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
             compositor.detach();
             drop(screen);
             screen = null;
+            // the template is gone, and pan mode with it: no tap at the pointer
+            panning = false;
+            io.removeCallbacks(pointerClick);
+            io.removeCallbacks(panIdleNow);
+            showPointer(false);
             sync();
             done.countDown();
         });
@@ -231,9 +284,231 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
 
     public void click(float x, float y) {
         io.post(() -> {
-            if (navBar.contains((int) x, (int) y)) navTap(Compositor.navButton(navBar, navSkip, dpi, y));
-            else if (content.contains((int) x, (int) y)) touch.click(x - content.left, y - content.top);
+            // a touch screen as well (some cars have both): its taps aren't the end of pan mode
+            if (panning) panTouched = true;
+            tap(x, y);
         });
+    }
+
+    /** A tap at a point of the screen surface: the navigation bar's, or the app's (worker thread). */
+    private void tap(float x, float y) {
+        if (navBar.contains((int) x, (int) y)) navTap(Compositor.navButton(navBar, navSkip, dpi, y));
+        else if (content.contains((int) x, (int) y)) touch.click(x - content.left, y - content.top);
+    }
+
+    /**
+     * Android Auto's pan mode came on or went off (main thread). Only cars without a touch screen
+     * show the pan button, so this is the knob's or touchpad's way in: on, the pointer shows; off,
+     * which is how a press of the knob arrives, it taps where the pointer is.
+     */
+    public void panMode(boolean on) {
+        io.post(() -> {
+            if (on == panning) return;
+            panning = on;
+            io.removeCallbacks(hidePointer);
+            io.removeCallbacks(pointerClick);
+            io.removeCallbacks(panIdleNow);
+            if (on) {
+                panTouched = false;
+                panActive();
+                pushX = pushY = 0;
+                lastDir = -1;
+                if (!Prefs.carKnob(context)) {
+                    Prefs.setCarKnob(context);
+                    knobFound = true;
+                }
+                showPointer(true);
+                tellPointer();
+            } else {
+                if (!panTouched && !panIdle) io.postDelayed(pointerClick, PAN_CLICK_MS);
+                else Log.d(TAG, "pan mode ended without a click (" + (panIdle ? "idle" : "touch") + ")");
+                io.postDelayed(hidePointer, POINTER_HIDE_MS);
+                // the action strip gets Apps; refreshed only now, so pan mode isn't disturbed
+                if (knobFound) {
+                    knobFound = false;
+                    main.post(listener::onMirrorChanged);
+                }
+            }
+        });
+    }
+
+    private final Runnable pointerClick = this::pointerClick;
+    private final Runnable hidePointer = this::hidePointer;
+    private final Runnable panIdleNow = this::panIdleNow;
+
+    /** The knob was used in pan mode: the pointer is live (again) for PAN_IDLE_MS. */
+    private void panActive() {
+        io.removeCallbacks(panIdleNow);
+        io.postDelayed(panIdleNow, PAN_IDLE_MS);
+        if (panIdle) {
+            panIdle = false;
+            showPointer(true);
+        }
+    }
+
+    /** Android Auto went idle: its pan mode is dead until the pan button is pressed again. */
+    private void panIdleNow() {
+        if (!panning) return;
+        panIdle = true;
+        showPointer(false);
+    }
+
+    /** The end of pan mode: a tap where the pointer is, unless the screen went away meanwhile. */
+    private void pointerClick() {
+        if (screen == null || px < 0) return;
+        Log.d(TAG, "pointer click " + Math.round(px) + "," + Math.round(py));
+        compositor.cursorPressed();
+        tap(px, py);
+    }
+
+    private void hidePointer() {
+        if (!panning) showPointer(false);
+    }
+
+    /** Shows or hides the pointer, placing it first: in the middle the first time, else where it was. */
+    private void showPointer(boolean on) {
+        pointerShown = on;
+        if (on) placePointer();
+        if (px >= 0) compositor.cursor(px, py, on);
+    }
+
+    /** The pointer goes over the app and the navigation bar, a little inside the screen's edges. */
+    private Rect pointerArea() {
+        Rect r = new Rect(content);
+        if (!navBar.isEmpty()) r.union(navBar);
+        int in = Math.round(POINTER_INSET_DP * dpi / 160f);
+        if (r.width() > 4 * in && r.height() > 4 * in) {
+            r.inset(r.left <= 0 ? in : 0, r.top <= 0 ? in : 0);
+            if (r.right >= screenW) r.right -= in;
+            if (r.bottom >= screenH) r.bottom -= in;
+        }
+        return r;
+    }
+
+    private void placePointer() {
+        Rect a = pointerArea();
+        if (a.isEmpty()) return;
+        if (px < 0) {
+            px = content.exactCenterX();
+            py = content.exactCenterY();
+        }
+        px = clamp(px, a.left, a.right - 1);
+        py = clamp(py, a.top, a.bottom - 1);
+    }
+
+    /**
+     * Pan mode's scroll (worker thread). The distances point the way the knob was pushed (the
+     * opposite of a finger drag's). A knob's nudge moves the pointer by a step; quick nudges the
+     * same way take bigger steps. A touchpad's finger distances move it as they are. Pushing on
+     * against an edge scrolls the app instead.
+     */
+    private void movePointer(float dx, float dy) {
+        Rect a = pointerArea();
+        if (a.isEmpty()) return;
+        panActive();
+        placePointer();
+        float s = dpi / 160f;
+        boolean nudge = (dx == 0) != (dy == 0) && Math.max(Math.abs(dx), Math.abs(dy)) >= NUDGE_MIN_DP * s;
+        if (nudge) {
+            int dir = dx > 0 ? RIGHT : dx < 0 ? LEFT : dy > 0 ? DOWN : UP;
+            long now = SystemClock.uptimeMillis();
+            streak = dir == lastDir && now - lastNudge < POINTER_ACCEL_MS ? Math.min(streak + 1, POINTER_MAX_SPEED - 1) : 0;
+            lastDir = dir;
+            lastNudge = now;
+            if (!navBar.isEmpty() && navNudge(dir, POINTER_STEP_DP * s * (1 + streak), a)) {
+                compositor.cursor(px, py, true);
+                return;
+            }
+            boolean atEdge = dir == RIGHT ? px >= a.right - 1 : dir == LEFT ? px <= a.left
+                    : dir == DOWN ? py >= a.bottom - 1 : py <= a.top;
+            if (atEdge) {
+                edgeScroll(dir);
+                return;
+            }
+            float step = POINTER_STEP_DP * s * (1 + streak);
+            px = clamp(px + Math.signum(dx) * step, a.left, a.right - 1);
+            py = clamp(py + Math.signum(dy) * step, a.top, a.bottom - 1);
+        } else {
+            float nx = px + dx, ny = py + dy;
+            px = clamp(nx, a.left, a.right - 1);
+            py = clamp(ny, a.top, a.bottom - 1);
+            pushX = nx != px ? pushX + nx - px : 0;
+            pushY = ny != py ? pushY + ny - py : 0;
+            float limit = EDGE_PUSH_DP * s;
+            if (Math.abs(pushY) >= limit) {
+                edgeScroll(pushY > 0 ? DOWN : UP);
+                pushY = 0;
+            }
+            if (Math.abs(pushX) >= limit) {
+                edgeScroll(pushX > 0 ? RIGHT : LEFT);
+                pushX = 0;
+            }
+        }
+        compositor.cursor(px, py, true);
+    }
+
+    /**
+     * A knob's nudge where the navigation bar is (worker thread): on the bar the pointer sits on a
+     * button, up and down go to the next one, towards the app leaves the bar (towards the screen's
+     * edge does nothing); a nudge that would end on the bar lands on the button at that height.
+     * False when the bar has nothing to do with this nudge.
+     */
+    private boolean navNudge(int dir, float step, Rect a) {
+        int n = Compositor.navCount();
+        boolean onBar = navBar.contains((int) px, (int) py);
+        if (onBar) {
+            int i = navButtonNear(py);
+            if (dir == UP || dir == DOWN) {
+                i = Math.max(0, Math.min(n - 1, i + (dir == DOWN ? 1 : -1)));
+                py = Compositor.navCentreY(navBar, navSkip, dpi, i);
+            } else if (navRight ? dir == LEFT : dir == RIGHT) {
+                px = clamp(navRight ? navBar.left - step : navBar.right + step, a.left, a.right - 1);
+            }
+            return true;
+        }
+        if (dir != (navRight ? RIGHT : LEFT)) return false;
+        float nx = px + (navRight ? step : -step);
+        if (navRight ? nx < navBar.left : nx >= navBar.right) return false;
+        px = navBar.exactCenterX();
+        py = Compositor.navCentreY(navBar, navSkip, dpi, navButtonNear(py));
+        return true;
+    }
+
+    /** The bar's button at this height, or the nearest one above or below the buttons. */
+    private int navButtonNear(float y) {
+        int i = Compositor.navButton(navBar, navSkip, dpi, y);
+        if (i >= 0) return i;
+        return y < Compositor.navCentreY(navBar, navSkip, dpi, 0) ? 0 : Compositor.navCount() - 1;
+    }
+
+    /**
+     * Scrolls the app by about half a screen with the mouse wheel: up or down at the pointer's x and
+     * the app's middle height (so a bar at the very top or bottom doesn't catch it), left or right
+     * at the pointer's y and the middle width.
+     */
+    private void edgeScroll(int dir) {
+        if (content.isEmpty()) return;
+        boolean vertical = dir == UP || dir == DOWN;
+        float notch = 64f * dpi / 160f;
+        int n = Math.max(1, Math.round(SCROLL_SHARE * (vertical ? content.height() : content.width()) / notch));
+        float x = vertical ? clamp(px, content.left, content.right - 1) : content.exactCenterX();
+        float y = vertical ? content.exactCenterY() : clamp(py, content.top, content.bottom - 1);
+        float v = dir == DOWN ? -n : dir == UP ? n : 0;
+        float h = dir == RIGHT ? n : dir == LEFT ? -n : 0;
+        Log.d(TAG, "pointer scroll " + (vertical ? "v " + v : "h " + h));
+        inject(Touch.wheel(x - content.left, y - content.top, v, h));
+    }
+
+    private static float clamp(float v, float lo, float hi) {
+        return Math.max(lo, Math.min(hi, v));
+    }
+
+    /** The first few drives with pan mode: how the pointer works, once per drive. */
+    private void tellPointer() {
+        if (pointerTold || Prefs.pointerTold(context) >= POINTER_TELL_TIMES) return;
+        pointerTold = true;
+        Prefs.addPointerTold(context);
+        say("Move the ring, then press to click there. Push past an edge to scroll.", true);
     }
 
     /** A tap on the navigation bar (worker thread). All but Apps need an open app. */
@@ -299,16 +574,35 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
         });
     }
 
+    /** A drag's distances; in pan mode, the knob's or touchpad's (they move the pointer). */
     public void scroll(float dx, float dy) {
-        touch.scroll(dx, dy);
+        io.post(() -> {
+            if (panning) movePointer(dx, dy);
+            else touch.scroll(dx, dy);
+        });
     }
 
     public void fling(float vx, float vy) {
-        touch.fling(vx, vy);
+        io.post(() -> {
+            if (!panning) touch.fling(vx, vy);
+        });
     }
 
     public void scale(float fx, float fy, float factor) {
-        io.post(() -> touch.scale(fx - content.left, fy - content.top, factor));
+        io.post(() -> {
+            float x = fx, y = fy;
+            if (x < 0 || y < 0) {
+                // no focal point (the car has no touch screen): the pointer's, or the app's middle
+                if (panning && px >= 0) {
+                    x = px;
+                    y = py;
+                } else {
+                    x = content.exactCenterX();
+                    y = content.exactCenterY();
+                }
+            }
+            touch.scale(x - content.left, y - content.top, factor);
+        });
     }
 
     /** A real touch, passed through as it is (the preview's "Direct" mode). */
@@ -355,8 +649,13 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
         if (m != null) m.io.post(m::applyContent);
     }
 
+    /** The app's Back (the car's Back button, the preview's rail). */
     public void back() {
-        io.post(() -> call(s -> s.key(KeyEvent.KEYCODE_BACK)));
+        io.post(() -> {
+            // like a finger on the app: wakes the phone again if the user had put it to sleep
+            if (car && pushedKeep) call(s -> s.keepRunning(true));
+            call(s -> s.key(KeyEvent.KEYCODE_BACK));
+        });
     }
 
     /** Closes the display and stops the worker. */
@@ -497,6 +796,7 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
             compositor.content(content, dpi);
             touch.area(content.width(), content.height(), dpi, null);
         }
+        if (px >= 0) showPointer(pointerShown); // still inside the app and the bar
         sync();
     }
 
@@ -688,7 +988,7 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
         } else if (pushedTo == null && Shell.state() == Shell.State.CONNECTING) {
             compositor.overlay(Compositor.CONNECTING, "Connecting to Shizuku…", null);
         } else if (app == null) {
-            compositor.overlay(Compositor.IDLE, "No app open", car ? "Tap Apps to open one" : null);
+            compositor.overlay(Compositor.IDLE, "No app open", car ? "Choose Apps to open one" : null);
         } else {
             compositor.overlay(Compositor.NONE, null, null);
         }

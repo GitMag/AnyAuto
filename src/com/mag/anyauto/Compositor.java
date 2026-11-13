@@ -49,6 +49,9 @@ import java.util.concurrent.TimeUnit;
  * <p>The car's <b>navigation bar</b> (Back, Apps, Keyboard, Close, Hide) is a third texture, drawn
  * into its own rect beside the content; {@link Mirror} hit-tests the taps with {@link #navButton}.
  *
+ * <p>On cars with a rotary knob or a touchpad, the <b>pointer</b> (a ring around the point it
+ * clicks) is drawn last, over the app and the bar, blended by its alpha.
+ *
  * <p>All GL work runs on its own thread. {@link #attach} / {@link #detach} wait for it, because
  * the host may destroy the screen surface as soon as its callback returns.
  */
@@ -87,6 +90,8 @@ final class Compositor implements SurfaceTexture.OnFrameAvailableListener {
     private static final String[] NAV_LABELS = {"Back", "Apps", "Keyboard", "Close", "Hide"};
     private static final int NAV_BG = 0xFF16171A;
     private static final long NAV_PRESS_MS = 180;
+    // the pointer: ring radius and the bitmap's size, dp
+    private static final float CURSOR_RING_DP = 14, CURSOR_BOX_DP = 40;
 
     private static final String FRAGMENT =
             "#extension GL_OES_EGL_image_external : require\n"
@@ -126,6 +131,13 @@ final class Compositor implements SurfaceTexture.OnFrameAvailableListener {
         draw();
     };
     private int dpi = 160;
+    private int cursorTex, cursorDownTex, cursorSize, cursorDpi;
+    private float cursorX, cursorY;
+    private boolean cursorShown, cursorDown;
+    private final Runnable cursorRelease = () -> {
+        cursorDown = false;
+        draw();
+    };
     private int overlayKind = NONE;
     private String overlayTitle, overlayHint;
     private boolean overlayReady;
@@ -183,7 +195,30 @@ final class Compositor implements SurfaceTexture.OnFrameAvailableListener {
             this.dpi = Math.max(1, dpi);
             texIn.setDefaultBufferSize(copy.width(), copy.height());
             renderOverlay();
+            if (cursorDpi != this.dpi) renderCursor();
             draw();
+        });
+    }
+
+    /** The pointer's point in screen-surface pixels, and whether it shows. */
+    void cursor(float x, float y, boolean shown) {
+        gl.post(() -> {
+            if (x == cursorX && y == cursorY && shown == cursorShown) return;
+            cursorX = x;
+            cursorY = y;
+            cursorShown = shown;
+            if (shown && cursorDpi != dpi) renderCursor();
+            draw();
+        });
+    }
+
+    /** The pointer clicks: its ring fills for a moment. */
+    void cursorPressed() {
+        gl.post(() -> {
+            gl.removeCallbacks(cursorRelease);
+            cursorDown = true;
+            draw();
+            gl.postDelayed(cursorRelease, NAV_PRESS_MS);
         });
     }
 
@@ -237,6 +272,18 @@ final class Compositor implements SurfaceTexture.OnFrameAvailableListener {
         if (slot <= 0) return -1;
         int i = (int) Math.floor((y - bar.top - skipTop - pad) / slot);
         return i < 0 || i >= NAV_ICONS.length ? -1 : i;
+    }
+
+    /** How many buttons the bar has. */
+    static int navCount() {
+        return NAV_ICONS.length;
+    }
+
+    /** The middle of button {@code i} in a bar of this rect, as y in the screen surface. */
+    static float navCentreY(Rect bar, int skipTop, int dpi, int i) {
+        float pad = navPad(dpi);
+        float slot = (bar.height() - skipTop - 2 * pad) / NAV_ICONS.length;
+        return bar.top + skipTop + pad + (i + 0.5f) * slot;
     }
 
     /** The bar's width for a screen: 72 dp, at most an eighth of the screen's width. */
@@ -310,6 +357,8 @@ final class Compositor implements SurfaceTexture.OnFrameAvailableListener {
         uTexM2 = GLES20.glGetUniformLocation(program2, "uTexM");
         overlayTex = texture2D();
         navTex = texture2D();
+        cursorTex = texture2D();
+        cursorDownTex = texture2D();
 
         texIn = new SurfaceTexture(texture);
         texIn.setDefaultBufferSize(1, 1);
@@ -359,6 +408,15 @@ final class Compositor implements SurfaceTexture.OnFrameAvailableListener {
         if (!nav.isEmpty() && navReady) {
             GLES20.glViewport(nav.left, surfaceH - nav.bottom, nav.width(), nav.height());
             quadWith(program2, aPos2, aTex2, uTexM2, GLES20.GL_TEXTURE_2D, navTex, FLIP_Y);
+        }
+        if (cursorShown && cursorDpi > 0) {
+            // centred on the point; Android bitmaps are premultiplied
+            int half = cursorSize / 2;
+            GLES20.glViewport(Math.round(cursorX) - half, surfaceH - Math.round(cursorY) - half, cursorSize, cursorSize);
+            GLES20.glEnable(GLES20.GL_BLEND);
+            GLES20.glBlendFunc(GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA);
+            quadWith(program2, aPos2, aTex2, uTexM2, GLES20.GL_TEXTURE_2D, cursorDown ? cursorDownTex : cursorTex, FLIP_Y);
+            GLES20.glDisable(GLES20.GL_BLEND);
         }
         EGL14.eglSwapBuffers(dpy, window);
     }
@@ -500,6 +558,44 @@ final class Compositor implements SurfaceTexture.OnFrameAvailableListener {
         GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, b, 0);
         b.recycle();
         navReady = true;
+    }
+
+    /**
+     * The pointer as two bitmaps (normal, and pressed with the ring filled): a white ring with a
+     * dark edge, so it shows on light and dark apps, and a dot at the point it clicks. Sizes are
+     * px at 160 dpi, scaled by the surface dpi.
+     */
+    private void renderCursor() {
+        float s = dpi / 160f;
+        cursorSize = Math.max(8, Math.round(CURSOR_BOX_DP * s));
+        float c = cursorSize / 2f, r = CURSOR_RING_DP * s, w = 3 * s, edge = 1.5f * s;
+        for (int pass = 0; pass < 2; pass++) {
+            Bitmap b = Bitmap.createBitmap(cursorSize, cursorSize, Bitmap.Config.ARGB_8888);
+            Canvas cv = new Canvas(b);
+            Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+            if (pass == 1) {
+                p.setStyle(Paint.Style.FILL);
+                p.setColor(0x66FFFFFF);
+                cv.drawCircle(c, c, r, p);
+            }
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(w + 2 * edge);
+            p.setColor(0xB3000000);
+            cv.drawCircle(c, c, r, p);
+            p.setStrokeWidth(w);
+            p.setColor(Color.WHITE);
+            cv.drawCircle(c, c, r, p);
+            p.setStyle(Paint.Style.FILL);
+            p.setColor(0xB3000000);
+            cv.drawCircle(c, c, 2.5f * s + edge, p);
+            p.setColor(Color.WHITE);
+            cv.drawCircle(c, c, 2.5f * s, p);
+            makeCurrent(window != EGL14.EGL_NO_SURFACE ? window : pbuffer);
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, pass == 0 ? cursorTex : cursorDownTex);
+            GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, b, 0);
+            b.recycle();
+        }
+        cursorDpi = dpi;
     }
 
     private void dropWindow() {

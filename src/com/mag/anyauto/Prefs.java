@@ -24,6 +24,8 @@ public final class Prefs {
     private static final String PHONE_GROUP = "phone_group";
     private static final String DARK_NOTE_HIDDEN = "dark_note_hidden";
     private static final String DARK_TOLD = "dark_told";
+    private static final String CAR_KNOB = "car_knob";
+    private static final String POINTER_TOLD = "pointer_told";
 
     private Prefs() {
     }
@@ -137,6 +139,32 @@ public final class Prefs {
 
     static void addDarkTold(Context c) {
         p(c).edit().putInt(DARK_TOLD, darkTold(c) + 1).apply();
+    }
+
+    /**
+     * The car has a rotary knob or a touchpad: Android Auto showed it the pan button (which touch
+     * screens don't get) and the user pressed it. Its action strip then has Apps too.
+     */
+    public static boolean carKnob(Context c) {
+        return p(c).getBoolean(CAR_KNOB, false);
+    }
+
+    static void setCarKnob(Context c) {
+        if (!carKnob(c)) p(c).edit().putBoolean(CAR_KNOB, true).apply();
+    }
+
+    /** Forgets the knob car and the pointer hints (tests: the headless car's {@code --ez knob false}). */
+    static void forgetCarKnob(Context c) {
+        p(c).edit().remove(CAR_KNOB).remove(POINTER_TOLD).apply();
+    }
+
+    /** How many drives the car explained the pointer (knob and touchpad cars). */
+    static int pointerTold(Context c) {
+        return p(c).getInt(POINTER_TOLD, 0);
+    }
+
+    static void addPointerTold(Context c) {
+        p(c).edit().putInt(POINTER_TOLD, pointerTold(c) + 1).apply();
     }
 
     /** Where the keyboard opens while the car shows an app: on the car screen (default) or the phone. */

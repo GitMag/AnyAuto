@@ -40,6 +40,11 @@ public final class HelpActivity extends Activity {
         para(col, "Back is the app's own Back. Apps goes to the apps grid. Close closes the app, like swiping it away in Recents. Hide gives the app the whole width; the bar button at the top right of the car screen brings the bar back.");
         para(col, "That bar button is Android Auto's own: it floats over the app until it hides, and a tap on the screen shows it again. To keep it out of the app's way, turn off ⋮ → Full screen in the car.");
 
+        heading(col, "Cars without a touch screen");
+        para(col, "With a rotary knob or a touchpad, select Android Auto's pan button (✥) at the bottom right and press: a ring, AnyAuto's pointer, appears. Push the knob to move it; quick pushes go further. Press the knob to click where the ring is, and press the pan button again for the next click.");
+        para(col, "Push past the top or bottom edge to scroll. Push the ring into the navigation bar and it lands on a button; up and down go from button to button. The car's Back button is the app's Back, and once you have used the pointer, Android Auto's buttons include Apps too.");
+        para(col, "After 10 seconds without the knob, Android Auto hides its buttons and the ring goes away. The next press of the pan button then clicks nothing; press it again to bring the ring back.");
+
         heading(col, "Updates");
         para(col, "When you open AnyAuto, it looks for a new version on GitHub. When one is ready, tap Update on the Home screen, then Install in UnknownAuto, so Android Auto keeps accepting AnyAuto. Nothing runs in the background. Turn it off with ⋮ → Check for updates automatically.");
 

@@ -125,6 +125,25 @@ public final class Touch {
         });
     }
 
+    /**
+     * One mouse-wheel event at (x, y): {@code v} notches vertically (positive scrolls up, as
+     * {@code AXIS_VSCROLL}) and {@code h} horizontally (positive scrolls right). Views scroll by
+     * their own wheel step, about 64 dp a notch. Unlike a drag, it can't turn into a tap.
+     */
+    static MotionEvent wheel(float x, float y, float v, float h) {
+        MotionEvent.PointerProperties[] pp = {new MotionEvent.PointerProperties()};
+        pp[0].id = 0;
+        pp[0].toolType = MotionEvent.TOOL_TYPE_MOUSE;
+        MotionEvent.PointerCoords[] pc = {new MotionEvent.PointerCoords()};
+        pc[0].x = x;
+        pc[0].y = y;
+        pc[0].setAxisValue(MotionEvent.AXIS_VSCROLL, v);
+        pc[0].setAxisValue(MotionEvent.AXIS_HSCROLL, h);
+        long now = SystemClock.uptimeMillis();
+        return MotionEvent.obtain(now, now, MotionEvent.ACTION_SCROLL, 1, pp, pc, 0, 0, 1f, 1f, 0, 0,
+                InputDevice.SOURCE_MOUSE, 0);
+    }
+
     /** Lifts any finger now (e.g. when the surface goes away). */
     public void cancel() {
         h.post(this::endNow);
