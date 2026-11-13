@@ -26,6 +26,8 @@ public final class Shell {
     private static final int REQUEST = 4100;
     // bump whenever DisplayService changes, so Shizuku starts the new code instead of a running copy
     private static final int SERVICE_VERSION = 14;
+    private static final long BIND_TIMEOUT_MS = 35_000L;
+    private static final int MAX_BIND_ATTEMPTS = 3;
 
     enum State { NO_SHIZUKU, NOT_RUNNING, OLD_SHIZUKU, NO_PERMISSION, CONNECTING, READY }
 
@@ -39,18 +41,26 @@ public final class Shell {
     private static Shizuku.UserServiceArgs args;
     private static volatile IDisplayService service;
     private static volatile boolean binding;
+    private static int bindAttempts;
+    private static int bindGeneration;
+
+    private static void clearBinding() {
+        binding = false;
+        bindGeneration++;
+    }
 
     private static final ServiceConnection connection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder binder) {
             if (binder == null || !binder.pingBinder()) {
                 Log.w(TAG, "Shizuku user service came without a live binder");
-                binding = false;
+                clearBinding();
                 changed();
                 return;
             }
             service = IDisplayService.Stub.asInterface(binder);
-            binding = false;
+            clearBinding();
+            bindAttempts = 0;
             Log.i(TAG, "display service connected");
             changed();
         }
@@ -59,7 +69,8 @@ public final class Shell {
         public void onServiceDisconnected(ComponentName name) {
             Log.i(TAG, "display service disconnected");
             service = null;
-            binding = false;
+            clearBinding();
+            bindAttempts = 0;
             changed();
         }
     };
@@ -79,7 +90,8 @@ public final class Shell {
         }, main);
         Shizuku.addBinderDeadListener(() -> {
             service = null;
-            binding = false;
+            clearBinding();
+            bindAttempts = 0;
             changed();
         }, main);
         Shizuku.addRequestPermissionResultListener((code, result) -> {
@@ -128,15 +140,32 @@ public final class Shell {
     /** Binds the user service if Shizuku runs, the app is allowed and no bind is under way. */
     static void connect() {
         if (service != null || binding || app == null) return;
+        if (bindAttempts >= MAX_BIND_ATTEMPTS) return;
         try {
             if (!Shizuku.pingBinder() || Shizuku.isPreV11()
                     || Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
                 return;
             }
             binding = true;
+            final int generation = ++bindGeneration;
+            final int attempt = ++bindAttempts;
+            Log.i(TAG, "binding Shizuku display service (attempt " + attempt + "/" + MAX_BIND_ATTEMPTS + ")");
             Shizuku.bindUserService(args, connection);
+            main.postDelayed(() -> {
+                if (!binding || service != null || generation != bindGeneration) return;
+                Log.w(TAG, "Shizuku display service did not connect within " + BIND_TIMEOUT_MS
+                        + " ms (attempt " + attempt + "/" + MAX_BIND_ATTEMPTS + ")");
+                clearBinding();
+                try {
+                    Shizuku.unbindUserService(args, connection, true);
+                } catch (Throwable t) {
+                    Log.w(TAG, "Shizuku user service cleanup failed", t);
+                }
+                changed();
+                if (bindAttempts < MAX_BIND_ATTEMPTS) main.postDelayed(Shell::connect, 1000);
+            }, BIND_TIMEOUT_MS);
         } catch (Throwable t) {
-            binding = false;
+            clearBinding();
             Log.w(TAG, "Shizuku bind failed", t);
         }
     }
@@ -145,7 +174,7 @@ public final class Shell {
     static void lost(IDisplayService s) {
         if (service == s) {
             service = null;
-            binding = false;
+            clearBinding();
             changed();
         }
     }
