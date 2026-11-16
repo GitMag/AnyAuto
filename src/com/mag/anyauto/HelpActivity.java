@@ -27,7 +27,7 @@ public final class HelpActivity extends Activity {
         col.setPadding(dp(16), dp(8), dp(16), dp(16));
 
         heading(col, "Set up");
-        para(col, "1. Install Shizuku and start it (Wireless debugging, then Start). It has to be started again after every reboot.");
+        para(col, "1. Install Shizuku, or a Shizuku fork such as Shevery, and start it (Wireless debugging, then Start). It has to be started again after every reboot.");
         para(col, "2. For a car, install AnyAuto with UnknownAuto: Android Auto only runs apps installed from Google Play. The desktop head unit doesn't check.");
         para(col, "3. Choose the apps for the car. Try shows an app at car size on this phone.");
         para(col, "4. In the car, open AnyAuto and pick an app. AnyAuto's navigation bar runs down the left of the car screen: Back, Apps, Keyboard, Close and Hide. To have it on the right, choose ⋮ → Navigation bar side.");

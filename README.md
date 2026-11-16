@@ -40,7 +40,9 @@ Video: <a href="https://peach.blender.org/">Big Buck Bunny</a> © Blender Founda
 - An Android phone with Android 10 or newer.
 - **[Shizuku](https://shizuku.rikka.app/)**, installed and running. On Android 11 and newer it
   starts on the phone itself; Android 10 needs a computer after every reboot. On a rooted phone
-  with Android 13 or older, start Shizuku with Wireless debugging, not with root.
+  with Android 13 or older, start Shizuku with Wireless debugging, not with root. Shizuku forks
+  work too, also ones with their own package name such as
+  [Shevery](https://github.com/HmnDev-Tech/shevery).
 - **[UnknownAuto](https://github.com/GitMag/UnknownAuto)**. Android Auto only runs car apps
   installed from Google Play, and UnknownAuto installs AnyAuto so that it counts as one.
 

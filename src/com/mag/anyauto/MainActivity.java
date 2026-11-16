@@ -248,30 +248,32 @@ public final class MainActivity extends Activity implements Shell.Listener {
                             : "The car is using the display. The phone stays awake with its screen off. Try is unavailable meanwhile."));
         }
         Shell.State st = Shell.state();
+        // "Shizuku", or the fork the phone has instead ("Shevery")
+        String shizuku = Shell.managerLabel();
         switch (st) {
             case READY:
                 if (Shell.rootOnOldAndroid()) {
-                    cards.addView(card(R.drawable.ic_shell, "Shizuku runs as root",
-                            "On Android 13 and older, Android won't give root the car display. In the Shizuku app, start it with Wireless debugging instead.",
-                            Ui.filled(this, "Open Shizuku"), v -> openShizuku()));
+                    cards.addView(card(R.drawable.ic_shell, shizuku + " runs as root",
+                            "On Android 13 and older, Android won't give root the car display. In " + shizuku + ", start it with Wireless debugging instead.",
+                            Ui.filled(this, "Open " + shizuku), v -> openShizuku()));
                     break;
                 }
-                cards.addView(slim(Ui.icon(this, R.drawable.ic_check, Ui.accent(this)), null, "Shizuku is running"));
+                cards.addView(slim(Ui.icon(this, R.drawable.ic_check, Ui.accent(this)), null, shizuku + " is running"));
                 break;
             case CONNECTING:
                 ProgressBar p = new ProgressBar(this);
                 p.setIndeterminate(true);
-                cards.addView(slim(null, p, "Connecting to Shizuku…"));
+                cards.addView(slim(null, p, "Connecting to " + shizuku + "…"));
                 break;
             case NO_SHIZUKU:
                 cards.addView(card(R.drawable.ic_shell, "Shizuku isn't installed",
-                        "AnyAuto needs Shizuku. It gives the app the rights adb has, without root.",
+                        "AnyAuto needs Shizuku or a Shizuku fork. It gives the app the rights adb has, without root.",
                         Ui.filled(this, "Get Shizuku"), v -> openStore()));
                 break;
             case NOT_RUNNING:
-                cards.addView(card(R.drawable.ic_shell, "Shizuku isn't running",
-                        "Start it in the Shizuku app: Wireless debugging, then Start. It stops at every reboot.",
-                        Ui.filled(this, "Open Shizuku"), v -> openShizuku()));
+                cards.addView(card(R.drawable.ic_shell, shizuku + " isn't running",
+                        "Start it in " + shizuku + ": Wireless debugging, then Start. It stops at every reboot.",
+                        Ui.filled(this, "Open " + shizuku), v -> openShizuku()));
                 break;
             case OLD_SHIZUKU:
                 cards.addView(card(R.drawable.ic_shell, "Shizuku is too old",
@@ -279,8 +281,8 @@ public final class MainActivity extends Activity implements Shell.Listener {
                         Ui.filled(this, "Update Shizuku"), v -> openStore()));
                 break;
             case NO_PERMISSION:
-                cards.addView(card(R.drawable.ic_shell, "Allow AnyAuto in Shizuku",
-                        "Shizuku asks once. Choose Allow all the time.",
+                cards.addView(card(R.drawable.ic_shell, "Allow AnyAuto in " + shizuku,
+                        shizuku + " asks once. Choose Allow all the time.",
                         Ui.filled(this, "Allow"), v -> Shell.requestPermission()));
                 break;
         }
@@ -431,8 +433,10 @@ public final class MainActivity extends Activity implements Shell.Listener {
     }
 
     private void openShizuku() {
-        Intent i = getPackageManager().getLaunchIntentForPackage(Shell.SHIZUKU_PACKAGE);
+        String pkg = Shell.manager();
+        Intent i = pkg == null ? null : getPackageManager().getLaunchIntentForPackage(pkg);
         if (i != null) startActivity(i);
+        else openStore();
     }
 
     static boolean isUnknownAutoInstalled(Context c) {

@@ -999,12 +999,14 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
         switch (st) {
             case NO_SHIZUKU:
                 return new Problem("Shizuku isn't installed", "Install Shizuku on the phone, then start it.");
-            case NOT_RUNNING:
-                return new Problem("Shizuku isn't running", "Start it in the Shizuku app on the phone.");
+            case NOT_RUNNING: {
+                String name = Shell.managerLabel();
+                return new Problem(name + " isn't running", "Start it in " + name + " on the phone.");
+            }
             case OLD_SHIZUKU:
                 return new Problem("Shizuku is too old", "Update Shizuku on the phone.");
             case NO_PERMISSION:
-                return new Problem("AnyAuto isn't allowed in Shizuku", "Open AnyAuto on the phone and tap Allow.");
+                return new Problem("AnyAuto isn't allowed in " + Shell.managerLabel(), "Open AnyAuto on the phone and tap Allow.");
             default:
                 return null;
         }

@@ -4,12 +4,15 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
+import android.content.pm.ProviderInfo;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 
+import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import rikka.shizuku.Shizuku;
@@ -23,6 +26,10 @@ import rikka.shizuku.Shizuku;
 public final class Shell {
     private static final String TAG = "AnyAuto";
     static final String SHIZUKU_PACKAGE = "moe.shizuku.privileged.api";
+    // every Shizuku build and fork keeps these two names, whatever its package is called
+    private static final String MANAGER_PROVIDER = "moe.shizuku.manager.ShizukuManagerProvider";
+    private static final String API_PERMISSION = "moe.shizuku.manager.permission.API_V23";
+    private static final long MANAGER_CACHE_MS = 3000;
     private static final int REQUEST = 4100;
     // bump whenever DisplayService changes, so Shizuku starts the new code instead of a running copy
     private static final int SERVICE_VERSION = 14;
@@ -39,6 +46,8 @@ public final class Shell {
     private static Shizuku.UserServiceArgs args;
     private static volatile IDisplayService service;
     private static volatile boolean binding;
+    private static volatile String managerPkg;
+    private static volatile long managerAt;
 
     private static final ServiceConnection connection = new ServiceConnection() {
         @Override
@@ -89,17 +98,23 @@ public final class Shell {
         }, main);
     }
 
+    /**
+     * A live binder counts first, whoever sent it: Shizuku, a fork under another package name
+     * (Shevery) or Sui, which has no app at all. Only without one does the installed app decide
+     * between "not running" and "not installed".
+     */
     static State state() {
         if (service != null) return State.READY;
-        if (!installed()) return State.NO_SHIZUKU;
         try {
-            if (!Shizuku.pingBinder()) return State.NOT_RUNNING;
-            if (Shizuku.isPreV11()) return State.OLD_SHIZUKU;
-            if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) return State.NO_PERMISSION;
+            if (Shizuku.pingBinder()) {
+                if (Shizuku.isPreV11()) return State.OLD_SHIZUKU;
+                if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) return State.NO_PERMISSION;
+                return State.CONNECTING;
+            }
         } catch (Throwable t) {
-            return State.NOT_RUNNING;
+            Log.w(TAG, "Shizuku state check failed", t);
         }
-        return State.CONNECTING;
+        return manager() != null ? State.NOT_RUNNING : State.NO_SHIZUKU;
     }
 
     /**
@@ -158,12 +173,60 @@ public final class Shell {
         }
     }
 
-    static boolean installed() {
+    /**
+     * The installed Shizuku app, or null: Shizuku itself or a fork. Forks may use their own package
+     * name (Shevery: com.hamondev.shevery, its stealth build a random one), but they all keep the
+     * manager's binder provider class, so that is looked for first. Then the official package
+     * name, then whichever app defines Shizuku's permission (Shevery's compatibility stub).
+     * Apps with a launcher icon are visible to AnyAuto (manifest queries), so the provider scan
+     * also works on Android 11 and newer. Cached for a few seconds: the home screen asks often.
+     */
+    static String manager() {
+        long now = SystemClock.elapsedRealtime();
+        if (managerAt == 0 || now - managerAt > MANAGER_CACHE_MS) {
+            managerPkg = findManager();
+            managerAt = now;
+        }
+        return managerPkg;
+    }
+
+    /** The Shizuku app's name for buttons and messages ("Shevery"), or "Shizuku". */
+    static String managerLabel() {
+        String pkg = manager();
+        if (pkg != null && !SHIZUKU_PACKAGE.equals(pkg)) {
+            try {
+                PackageManager pm = app.getPackageManager();
+                CharSequence label = pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0));
+                if (label != null && label.length() > 0) return label.toString();
+            } catch (PackageManager.NameNotFoundException ignored) {
+                // removed since the last scan
+            }
+        }
+        return "Shizuku";
+    }
+
+    private static String findManager() {
+        PackageManager pm = app.getPackageManager();
         try {
-            app.getPackageManager().getPackageInfo(SHIZUKU_PACKAGE, 0);
-            return true;
+            List<ProviderInfo> providers = pm.queryContentProviders(null, 0, 0);
+            if (providers != null) {
+                for (ProviderInfo p : providers) {
+                    if (MANAGER_PROVIDER.equals(p.name)) return p.packageName;
+                }
+            }
+        } catch (RuntimeException e) {
+            Log.w(TAG, "provider scan failed", e);
+        }
+        try {
+            pm.getPackageInfo(SHIZUKU_PACKAGE, 0);
+            return SHIZUKU_PACKAGE;
+        } catch (PackageManager.NameNotFoundException ignored) {
+            // no official package
+        }
+        try {
+            return pm.getPermissionInfo(API_PERMISSION, 0).packageName;
         } catch (PackageManager.NameNotFoundException e) {
-            return false;
+            return null;
         }
     }
 
