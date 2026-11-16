@@ -111,6 +111,13 @@ nothing; press it again to get the ring back.
 - **Portrait-only apps** show upright in a column in the middle of the car screen.
 - **AnyAuto is listed as a navigation app** because only those get the whole car screen. It
   never starts navigation, so Google Maps keeps your directions.
+- **GrapheneOS and some custom ROMs can't list AnyAuto.** Android Auto accepts a car app only
+  when the install was started by Google's package installer (`com.google.android.packageinstaller`).
+  These ROMs ship the AOSP installer (`com.android.packageinstaller`) instead, so the Google Play
+  mark is ignored and *Unknown sources* doesn't cover this kind of app — AnyAuto never appears,
+  and UnknownAuto can't fix it. Without root the only ways in are to put your own build on a
+  Google Play internal-testing track, or to use a developer head unit (such as AAWireless's
+  developer mode).
 
 **Drive safely.** AnyAuto doesn't lock anything while the car is moving. Use video and other
 distracting apps only when the car is parked, and follow the traffic laws where you drive.
