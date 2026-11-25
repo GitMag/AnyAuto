@@ -45,6 +45,12 @@ import java.util.concurrent.TimeUnit;
  * is a tap at the pointer, on the app or on the navigation bar. On the bar the pointer goes from
  * button to button. Pressing the pan button again brings the pointer back where it was.
  *
+ * <p>Some cars with a knob reach Android Auto as a touch screen (wireless boxes that put Android
+ * Auto on the car's own screen), so the pan button never shows and the knob only reaches Android
+ * Auto's buttons. With the setting "Pointer buttons" those get Pointer, which swaps them for
+ * arrows, Tap and Done ({@link #pointerButtons(boolean)}): a press of an arrow is a nudge, Tap
+ * taps at the pointer, and the pointer stays until Done.
+ *
  * <p>Android Auto doesn't end pan mode when the user goes idle (10 s): it only hides its own
  * buttons, nudges then move the knob's focus instead, and the next press of the pan button ends
  * the pan mode that is still on. So after {@value #PAN_IDLE_MS} ms without the knob the pointer
@@ -99,7 +105,8 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
     private static final float POINTER_INSET_DP = 4;
     // drives on which the car explains the pointer
     private static final int POINTER_TELL_TIMES = 3;
-    private static final int UP = 0, DOWN = 1, LEFT = 2, RIGHT = 3;
+    /** Directions of a nudge, for {@link #pointerStep}. */
+    public static final int UP = 0, DOWN = 1, LEFT = 2, RIGHT = 3;
 
     /** What keeps the app off the screen: a short title and one sentence with the fix. */
     public static final class Problem {
@@ -145,6 +152,8 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
     private volatile Nav nav;
     private boolean darkTold;         // this drive was told that the phone's screen is dark on purpose
     private boolean panning;          // Android Auto's pan mode: knob and touchpad move the pointer
+    private boolean stepping;         // pointer buttons: Android Auto's arrows move the pointer
+    private volatile boolean buttonsOn; // the same, for the car screen's template (main thread)
     private boolean panTouched;       // a touch-screen tap came during this pan mode: no click at its end
     private boolean panIdle;          // no knob for PAN_IDLE_MS: Android Auto went idle, no click at the end
     private boolean knobFound;        // pan mode showed this drive that the car has a knob or touchpad
@@ -195,6 +204,8 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
             compositor.attach(s, w, h);
             io.removeCallbacks(applyContent);
             applyContent();
+            // back from the apps grid with the pointer buttons still on: the ring comes back too
+            if (stepping) showPointer(true);
         });
     }
 
@@ -318,7 +329,7 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
                     knobFound = true;
                 }
                 showPointer(true);
-                tellPointer();
+                tellPointer("Move the ring, then press to click there. Push past an edge to scroll.");
             } else {
                 if (!panTouched && !panIdle) io.postDelayed(pointerClick, PAN_CLICK_MS);
                 else Log.d(TAG, "pan mode ended without a click (" + (panIdle ? "idle" : "touch") + ")");
@@ -330,6 +341,57 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
                 }
             }
         });
+    }
+
+    /**
+     * The pointer buttons came on (Android Auto's Pointer) or went off (Done), from the main
+     * thread. On, the pointer shows where it was (in the middle the first time) and stays.
+     */
+    public void pointerButtons(boolean on) {
+        buttonsOn = on;
+        io.post(() -> {
+            if (on == stepping) return;
+            stepping = on;
+            io.removeCallbacks(hidePointer);
+            if (on) {
+                lastDir = -1;
+                wake();
+                showPointer(true);
+                tellPointer("Use the arrows to move the ring, then Tap. An arrow at the edge scrolls.");
+            } else if (!panning) {
+                showPointer(false);
+            }
+        });
+    }
+
+    /** True while the pointer buttons are on (any thread). */
+    public boolean pointerButtons() {
+        return buttonsOn;
+    }
+
+    /** An arrow of the pointer buttons: a knob's nudge that way ({@link #UP} and so on). */
+    public void pointerStep(int dir) {
+        io.post(() -> {
+            if (!stepping || screen == null) return;
+            wake();
+            float d = 2 * NUDGE_MIN_DP * dpi / 160f;
+            movePointer(dir == RIGHT ? d : dir == LEFT ? -d : 0, dir == DOWN ? d : dir == UP ? -d : 0);
+        });
+    }
+
+    /** Tap of the pointer buttons: a tap where the pointer is. */
+    public void pointerTap() {
+        io.post(() -> {
+            if (stepping) pointerClick();
+        });
+    }
+
+    /**
+     * A press of one of Android Auto's buttons, like a finger on the app: wakes the phone again if
+     * it went to sleep (worker thread). A knob car has no other way to do it.
+     */
+    private void wake() {
+        if (car && pushedKeep) call(s -> s.keepRunning(true));
     }
 
     private final Runnable pointerClick = this::pointerClick;
@@ -350,7 +412,7 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
     private void panIdleNow() {
         if (!panning) return;
         panIdle = true;
-        showPointer(false);
+        if (!stepping) showPointer(false);
     }
 
     /** The end of pan mode: a tap where the pointer is, unless the screen went away meanwhile. */
@@ -362,7 +424,7 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
     }
 
     private void hidePointer() {
-        if (!panning) showPointer(false);
+        if (!panning && !stepping) showPointer(false);
     }
 
     /** Shows or hides the pointer, placing it first: in the middle the first time, else where it was. */
@@ -405,7 +467,7 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
     private void movePointer(float dx, float dy) {
         Rect a = pointerArea();
         if (a.isEmpty()) return;
-        panActive();
+        if (panning) panActive();
         placePointer();
         float s = dpi / 160f;
         boolean nudge = (dx == 0) != (dy == 0) && Math.max(Math.abs(dx), Math.abs(dy)) >= NUDGE_MIN_DP * s;
@@ -503,12 +565,12 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
         return Math.max(lo, Math.min(hi, v));
     }
 
-    /** The first few drives with pan mode: how the pointer works, once per drive. */
-    private void tellPointer() {
+    /** The first few drives with the pointer: how it works, once per drive. */
+    private void tellPointer(String how) {
         if (pointerTold || Prefs.pointerTold(context) >= POINTER_TELL_TIMES) return;
         pointerTold = true;
         Prefs.addPointerTold(context);
-        say("Move the ring, then press to click there. Push past an edge to scroll.", true);
+        say(how, true);
     }
 
     /** A tap on the navigation bar (worker thread). All but Apps need an open app. */
@@ -593,7 +655,7 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
             float x = fx, y = fy;
             if (x < 0 || y < 0) {
                 // no focal point (the car has no touch screen): the pointer's, or the app's middle
-                if (panning && px >= 0) {
+                if ((panning || stepping) && px >= 0) {
                     x = px;
                     y = py;
                 } else {
@@ -643,10 +705,13 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
         }
     }
 
-    /** A setting changed (keyboard, full screen, phone screen): the car's Mirror applies it now. */
+    /** A setting changed (keyboard, full screen, phone screen, pointer buttons): the car's Mirror applies it now. */
     public static void settingsChanged() {
         Mirror m = carShowing;
-        if (m != null) m.io.post(m::applyContent);
+        if (m == null) return;
+        if (m.buttonsOn && !Prefs.pointerButtons(m.context)) m.pointerButtons(false);
+        m.io.post(m::applyContent);
+        m.main.post(m.listener::onMirrorChanged); // Android Auto's buttons (Pointer)
     }
 
     /** The app's Back (the car's Back button, the preview's rail). */

@@ -38,7 +38,7 @@ public final class MainActivity extends Activity implements Shell.Listener {
     static final String UNKNOWNAUTO = "com.mag.unknownauto";
     static final String UNKNOWNAUTO_RELEASES = "https://github.com/GitMag/UnknownAuto/releases/latest";
     private static final int MENU_HELP = 1, MENU_INSTALL = 2, MENU_KEYBOARD = 3, MENU_FULL = 4, MENU_PHONE_ON = 5,
-            MENU_AUTO_UPDATE = 6, MENU_CHECK_UPDATE = 7, MENU_NAV_SIDE = 8;
+            MENU_AUTO_UPDATE = 6, MENU_CHECK_UPDATE = 7, MENU_NAV_SIDE = 8, MENU_POINTER = 9;
 
     private LinearLayout cards;
     private TextView section, sectionCount;
@@ -148,6 +148,8 @@ public final class MainActivity extends Activity implements Shell.Listener {
                 .setChecked(Prefs.keepPhoneOn(this));
         menu.add(0, MENU_KEYBOARD, 2, "Keyboard");
         menu.add(0, MENU_NAV_SIDE, 3, "Navigation bar side");
+        menu.add(0, MENU_POINTER, 3, "Pointer buttons (knob)").setCheckable(true)
+                .setChecked(Prefs.pointerButtons(this));
         menu.add(0, MENU_AUTO_UPDATE, 4, "Check for updates automatically").setCheckable(true)
                 .setChecked(Prefs.autoUpdate(this));
         menu.add(0, MENU_CHECK_UPDATE, 5, "Check for updates now");
@@ -170,6 +172,22 @@ public final class MainActivity extends Activity implements Shell.Listener {
             item.setChecked(on);
             Prefs.setKeepPhoneOn(this, on);
             Mirror.settingsChanged();
+            return true;
+        }
+        if (item.getItemId() == MENU_POINTER) {
+            boolean on = !item.isChecked();
+            item.setChecked(on);
+            Prefs.setPointerButtons(this, on);
+            Mirror.settingsChanged();
+            if (on) {
+                new AlertDialog.Builder(this)
+                        .setTitle("Pointer buttons")
+                        .setMessage("For cars with a knob where Android Auto shows no pan button (✥). "
+                                + "Android Auto's buttons on the car screen get Pointer: press it, then use the arrows "
+                                + "to move the ring and Tap to click there. Done brings the usual buttons back.")
+                        .setPositiveButton("OK", null)
+                        .show();
+            }
             return true;
         }
         if (item.getItemId() == MENU_AUTO_UPDATE) {

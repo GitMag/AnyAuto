@@ -36,6 +36,11 @@ import com.mag.anyauto.R;
  * AnyAuto's bar without the pointer. The car's Back button is the app's Back. When the app cannot
  * be shown, the reason goes in the template's message card.
  *
+ * <p>With the setting "Pointer buttons" (knob cars that Android Auto takes for a touch screen, so
+ * no pan button) the action strip has Pointer and Apps as well. Pointer swaps the strips for the
+ * pointer's own buttons: Tap and Done at the top, the four arrows in the map action strip, until
+ * Done ({@link Mirror#pointerButtons(boolean)}).
+ *
  * <p>The surface callbacks arrive on the main thread. They are forwarded to {@link Mirror}; the
  * gestures are logged ({@code adb logcat -s AnyAuto.car}) to check what the host sends.
  */
@@ -69,8 +74,15 @@ final class MirrorScreen extends Screen implements SurfaceCallback, Mirror.Nav {
     @NonNull
     @Override
     public Template onGetTemplate() {
+        boolean buttons = Prefs.pointerButtons(getCarContext());
+        if (buttons && mirror.pointerButtons()) return pointerTemplate();
         ActionStrip.Builder strip = new ActionStrip.Builder();
-        if (Prefs.carKnob(getCarContext())) {
+        if (buttons) {
+            strip.addAction(new Action.Builder().setIcon(icon(R.drawable.ic_pointer))
+                    .setOnClickListener(() -> pointer(true))
+                    .build());
+        }
+        if (buttons || Prefs.carKnob(getCarContext())) {
             strip.addAction(new Action.Builder().setIcon(icon(R.drawable.ic_apps))
                     .setOnClickListener(this::apps)
                     .build());
@@ -85,13 +97,66 @@ final class MirrorScreen extends Screen implements SurfaceCallback, Mirror.Nav {
                     Log.d(TAG, "pan mode " + on);
                     mirror.panMode(on);
                 });
-        // problems only: a title and one sentence with the fix
+        problem(b);
+        return b.build();
+    }
+
+    /**
+     * The pointer buttons: Tap and Done in the action strip, the arrows in the map action strip.
+     * The knob turns from button to button in that order and presses them. Tap comes first because
+     * after 10 s without input Android Auto puts the focus back on the first button and the next
+     * press presses it: after a pause that is most likely the click the ring was moved for (Done
+     * there would end the pointer instead).
+     */
+    private Template pointerTemplate() {
+        ActionStrip strip = new ActionStrip.Builder()
+                .addAction(new Action.Builder().setTitle("Tap").setIcon(icon(R.drawable.ic_touch))
+                        .setOnClickListener(mirror::pointerTap)
+                        .build())
+                .addAction(new Action.Builder().setTitle("Done").setIcon(icon(R.drawable.ic_check))
+                        .setOnClickListener(() -> pointer(false))
+                        .build())
+                .build();
+        ActionStrip arrows = new ActionStrip.Builder()
+                .addAction(arrow(R.drawable.ic_arrow_up, Mirror.UP))
+                .addAction(arrow(R.drawable.ic_arrow_down, Mirror.DOWN))
+                .addAction(arrow(R.drawable.ic_arrow_left, Mirror.LEFT))
+                .addAction(arrow(R.drawable.ic_arrow_right, Mirror.RIGHT))
+                .build();
+        NavigationTemplate.Builder b = new NavigationTemplate.Builder()
+                .setActionStrip(strip)
+                .setMapActionStrip(arrows)
+                .setPanModeListener(on -> {
+                    Log.d(TAG, "pan mode " + on);
+                    mirror.panMode(on);
+                });
+        problem(b);
+        return b.build();
+    }
+
+    private Action arrow(int res, int dir) {
+        return new Action.Builder().setIcon(icon(res))
+                .setOnClickListener(() -> {
+                    Log.d(TAG, "pointer arrow " + dir);
+                    mirror.pointerStep(dir);
+                })
+                .build();
+    }
+
+    /** Pointer (on) or Done (off) of the pointer buttons. */
+    private void pointer(boolean on) {
+        Log.d(TAG, "pointer buttons " + on);
+        mirror.pointerButtons(on);
+        invalidate();
+    }
+
+    /** Problems only: a title and one sentence with the fix. */
+    private void problem(NavigationTemplate.Builder b) {
         Mirror.Problem p = mirror.problem();
         if (p != null) {
             b.setNavigationInfo(new MessageInfo.Builder(p.title).setText(p.text)
                     .setImage(icon(R.drawable.ic_phone_alert)).build());
         }
-        return b.build();
     }
 
     // ------------------------------------------------------------------ Mirror.Nav (main thread)

@@ -26,6 +26,7 @@ public final class Prefs {
     private static final String DARK_TOLD = "dark_told";
     private static final String CAR_KNOB = "car_knob";
     private static final String POINTER_TOLD = "pointer_told";
+    private static final String POINTER_BUTTONS = "pointer_buttons";
 
     private Prefs() {
     }
@@ -156,6 +157,19 @@ public final class Prefs {
     /** Forgets the knob car and the pointer hints (tests: the headless car's {@code --ez knob false}). */
     static void forgetCarKnob(Context c) {
         p(c).edit().remove(CAR_KNOB).remove(POINTER_TOLD).apply();
+    }
+
+    /**
+     * The setting "Pointer buttons": Android Auto's buttons get Pointer, which turns them into
+     * arrows, Tap and Done that move and click AnyAuto's pointer. For cars with a knob that
+     * Android Auto takes for a touch screen (some wireless boxes), where the pan button never shows.
+     */
+    public static boolean pointerButtons(Context c) {
+        return p(c).getBoolean(POINTER_BUTTONS, false);
+    }
+
+    public static void setPointerButtons(Context c, boolean on) {
+        p(c).edit().putBoolean(POINTER_BUTTONS, on).apply();
     }
 
     /** How many drives the car explained the pointer (knob and touchpad cars). */

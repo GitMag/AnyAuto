@@ -24,6 +24,13 @@ public final class Headless extends BroadcastReceiver {
             Log.i(TAG, "headless: knob car forgotten");
             return;
         }
+        // --ez buttons true|false: the setting "Pointer buttons (knob)"
+        if (intent.hasExtra("buttons")) {
+            Prefs.setPointerButtons(c, intent.getBooleanExtra("buttons", false));
+            Mirror.settingsChanged();
+            Log.i(TAG, "headless: pointer buttons " + Prefs.pointerButtons(c));
+            return;
+        }
         Shell.init(c);
         PendingResult result = goAsync();
         new Thread(() -> {

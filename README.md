@@ -81,7 +81,7 @@ car screen:
 - **Hide:** the app gets the whole width. The button at the top right brings the bar back.
 
 Settings in ⋮: the bar on the left or right, full screen, the keyboard on the car screen or the
-phone, and keeping the phone's screen on.
+phone, keeping the phone's screen on, and pointer buttons for a knob.
 
 ### Cars without a touch screen
 
@@ -97,6 +97,14 @@ With a rotary knob (such as BMW's iDrive) or a touchpad, select Android Auto's p
 
 After 10 seconds without the knob, the ring goes away. Pressing the pan button then clicks
 nothing; press it again to get the ring back.
+
+**No pan button?** Some wireless adapters tell Android Auto that the car has a touch screen, so
+✥ never shows. Turn on ⋮ → **Pointer buttons (knob)** in AnyAuto. Android Auto's buttons at
+the top right then get **Pointer** (✥); push the knob up to reach them. Press Pointer, and they
+become **Tap**, **Done** and four arrows: turn the knob to an arrow and press to move the ring
+(quick presses go further), then press **Tap** to click there. An arrow at the edge scrolls, and
+the ring goes into AnyAuto's bar like above. **Done** brings the usual buttons back. After
+10 seconds without the knob, Android Auto puts the focus back on **Tap**.
 
 ## Good to know
 
