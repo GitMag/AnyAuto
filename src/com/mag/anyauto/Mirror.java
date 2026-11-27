@@ -29,8 +29,9 @@ import java.util.concurrent.TimeUnit;
  * <p>The display draws into a {@link Compositor}, which puts it into the <b>content rect</b>: the
  * part of the screen surface the user can see. That is the car's stable area (not covered by the
  * action strip, and the dashboard card's slice when AnyAuto is in the map card), else its visible
- * area, else the whole surface. The display is sized to the content rect, and car coordinates
- * are moved into it before they reach {@link Touch}.
+ * area, else the whole surface; with "Full screen in the car" the stable area grows out to the
+ * screen's edges and under the action strip ({@link #fullScreen(Rect)}). The display is sized to
+ * the content rect, and car coordinates are moved into it before they reach {@link Touch}.
  *
  * <p>On the car, AnyAuto's <b>navigation bar</b> (Back, Apps, Keyboard, Close, Hide) takes a band
  * at the left (or, by the setting, the right) of the full-width view, beside the app; taps in it
@@ -64,6 +65,10 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
     private static final String TAG = "AnyAuto";
     // the car sends the visible and the stable area one after the other: resize once
     private static final long CONTENT_SETTLE_MS = 150;
+    // a gap between the stable area and the screen's edge this small is only the margin (12 px
+    // on the desktop head unit), not room for Android Auto's button (a column of 100 px, a band of
+    // 88 px) or the other card (far wider); in a card, a gap this small at the top is that band
+    private static final int MARGIN_DP = 32, CARD_BAND_DP = 128;
     // while the car shows AnyAuto: how often to ask whether the phone refused to stay dark
     private static final long FIGHT_CHECK_MS = 10_000;
 
@@ -824,7 +829,9 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
     private void applyContent() {
         Rect full = new Rect(0, 0, screenW, screenH);
         Rect r;
-        if (forced != null && full.contains(forced) && !forced.isEmpty()) r = forced;
+        // the preview's simulated card, laid out the way the car's card would be
+        if (forced != null && full.contains(forced) && !forced.isEmpty())
+            r = Prefs.fullScreen(context) ? cardScreen(forced) : forced;
         else if (!stable.isEmpty() && full.contains(stable)) r = car && Prefs.fullScreen(context) ? fullScreen(stable) : stable;
         else if (!visible.isEmpty() && full.contains(visible)) r = visible;
         else r = full;
@@ -835,11 +842,9 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
         // full-width view only; with no app open there is nothing to cover, so the bar stays
         if (car && (Prefs.navBar(context) || app == null) && r.width() >= screenW * 0.8f) {
             int bw = Compositor.navWidth(screenW, dpi);
+            // the bar itself goes to the top; its buttons start below Android Auto's button
+            skip = navSkip(r, right);
             if (right) {
-                // Android Auto's own button floats at the top right: the buttons start below it,
-                // where the stable area starts (in full screen the bar itself goes to the top)
-                if (stable.isEmpty()) skip = Math.round(80 * dpi / 160f);
-                else if (stable.top > r.top) skip = stable.top - r.top;
                 bar.set(r.right - bw, r.top, r.right, r.bottom);
                 r = new Rect(r.left, r.top, r.right - bw, r.bottom);
             } else {
@@ -852,7 +857,7 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
             navSkip = skip;
             navRight = right;
             Log.i(TAG, "navigation bar " + (bar.isEmpty() ? "hidden" : bar.toShortString()
-                    + (right ? " (right, buttons from +" + skip + ")" : " (left)")));
+                    + (right ? " (right" : " (left") + ", buttons from +" + skip + ")"));
         }
         compositor.nav(navBar, navSkip, navRight, launched != null);
         if (!r.equals(content)) {
@@ -866,16 +871,59 @@ public final class Mirror implements Touch.Sink, Shell.Listener {
     }
 
     /**
+     * How far below the top of the view the navigation bar's buttons start, so that Android Auto's
+     * own button (it floats over the full-width view) doesn't cover one. The stable area leaves room
+     * for it: a column down one side with the button at its top (Android Auto 18.1: the left), or a
+     * band across the top with the button at the right (18.0). The buttons start below a column on
+     * the bar's side (the button is round: as tall as the column is wide), and on the right below
+     * the band. Without full screen the view is the stable area, which the button stays out of.
+     */
+    private int navSkip(Rect r, boolean right) {
+        if (stable.isEmpty()) return right ? Math.round(80 * dpi / 160f) : 0;
+        int margin = Math.round(MARGIN_DP * dpi / 160f);
+        int column = right ? r.right - stable.right : stable.left - r.left;
+        if (column > margin) return column;
+        int band = stable.top - r.top;
+        return right && band > margin ? band : 0;
+    }
+
+    /**
      * The setting "Full screen in the car": the app gets the whole surface, edge to edge, the way
      * Google Maps draws its map. The stable area leaves a margin all round (12 px on the desktop
      * head unit, plus the band Android Auto keeps for Apps and Back), which showed as a black frame.
      * The buttons float over the app while shown and hide by themselves, and Android Auto rounds the
-     * surface's corners. Fixed, so the app never jumps when the buttons show and hide. Only for
-     * the full-width view: the dashboard and launcher cards keep their card.
+     * surface's corners. Fixed, so the app never jumps when the buttons show and hide. In a
+     * dashboard or launcher card see {@link #cardScreen(Rect)}.
      */
     private Rect fullScreen(Rect s) {
-        if (s.width() < screenW * 0.8f) return s;
+        if (s.width() < screenW * 0.8f) return cardScreen(s);
         return new Rect(0, 0, screenW, screenH);
+    }
+
+    /**
+     * Full screen in a card (Android Auto's split screen, the app beside a media card): the card's
+     * stable area leaves out the band at the top where Android Auto's button floats, which showed
+     * as a black band above the app (issue #13). The app goes up through that band and out to the
+     * screen's edges, like the full-width view: a side goes out where the gap is just the margin,
+     * the top where it is just the button's band. Toward the other card the card reaches as far
+     * past its stable area as it does at the screen's edge (12 px on the desktop head unit, where
+     * Google Maps' card ends too).
+     */
+    private Rect cardScreen(Rect s) {
+        int margin = Math.round(MARGIN_DP * dpi / 160f);
+        int left = s.left, right = screenW - s.right;
+        Rect r = new Rect(s);
+        if (left <= margin) {
+            r.left = 0;
+            if (right > margin) r.right = s.right + left;
+        }
+        if (right <= margin) {
+            r.right = screenW;
+            if (left > margin) r.left = s.left - right;
+        }
+        if (screenH - s.bottom <= margin) r.bottom = screenH;
+        if (s.top <= Math.round(CARD_BAND_DP * dpi / 160f)) r.top = 0;
+        return r;
     }
 
     /**

@@ -31,6 +31,13 @@ public final class Headless extends BroadcastReceiver {
             Log.i(TAG, "headless: pointer buttons " + Prefs.pointerButtons(c));
             return;
         }
+        // --ez navright true|false: the setting "Navigation bar side"
+        if (intent.hasExtra("navright")) {
+            Prefs.setNavRight(c, intent.getBooleanExtra("navright", false));
+            Mirror.settingsChanged();
+            Log.i(TAG, "headless: navigation bar on the " + (Prefs.navRight(c) ? "right" : "left"));
+            return;
+        }
         Shell.init(c);
         PendingResult result = goAsync();
         new Thread(() -> {

@@ -78,7 +78,12 @@ car screen:
 - **Keyboard:** opens or closes the keyboard for the selected text field. Tapping a text field
   opens it too.
 - **Close:** closes the app, like swiping it away in Recents.
-- **Hide:** the app gets the whole width. The button at the top right brings the bar back.
+- **Hide:** the app gets the whole width. Android Auto's round button at the top brings the bar
+  back.
+
+The app fills the car screen edge to edge, also beside the media card in Android Auto's split
+screen. Android Auto's round button floats over it and hides by itself after a few seconds; to
+keep it out of the app's way, turn off ⋮ → **Full screen in the car**.
 
 Settings in ⋮: the bar on the left or right, full screen, the keyboard on the car screen or the
 phone, keeping the phone's screen on, and pointer buttons for a knob.
@@ -93,14 +98,14 @@ With a rotary knob (such as BMW's iDrive) or a touchpad, select Android Auto's p
 - **Scroll:** push past the top or bottom edge.
 - **AnyAuto's bar:** push the ring into the bar and it lands on a button; up and down go from
   button to button.
-- **Back:** the car's Back button. Android Auto's buttons at the top right also get **Apps**.
+- **Back:** the car's Back button. Android Auto's buttons at the top also get **Apps**.
 
 After 10 seconds without the knob, the ring goes away. Pressing the pan button then clicks
 nothing; press it again to get the ring back.
 
 **No pan button?** Some wireless adapters tell Android Auto that the car has a touch screen, so
 ✥ never shows. Turn on ⋮ → **Pointer buttons (knob)** in AnyAuto. Android Auto's buttons at
-the top right then get **Pointer** (✥); push the knob up to reach them. Press Pointer, and they
+the top then get **Pointer** (✥); push the knob up to reach them. Press Pointer, and they
 become **Tap**, **Done** and four arrows: turn the knob to an arrow and press to move the ring
 (quick presses go further), then press **Tap** to click there. An arrow at the edge scrolls, and
 the ring goes into AnyAuto's bar like above. **Done** brings the usual buttons back. After

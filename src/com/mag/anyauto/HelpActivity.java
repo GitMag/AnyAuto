@@ -37,8 +37,8 @@ public final class HelpActivity extends Activity {
         para(col, "To use the phone at the same time, turn on ⋮ → Keep the phone's screen on.");
         para(col, "If your phone turns its screen straight back on, or goes to sleep, when AnyAuto turns it off, AnyAuto stops doing that so the screen doesn't flicker, and turns on Keep the phone's screen on for later drives.");
         para(col, "Tap a text field and the keyboard opens on the car screen. The Keyboard button opens it for the selected text field, or closes it. To type on the phone instead, choose ⋮ → Keyboard → On the phone; the phone's screen then stays on.");
-        para(col, "Back is the app's own Back. Apps goes to the apps grid. Close closes the app, like swiping it away in Recents. Hide gives the app the whole width; the bar button at the top right of the car screen brings the bar back.");
-        para(col, "That bar button is Android Auto's own: it floats over the app until it hides, and a tap on the screen shows it again. To keep it out of the app's way, turn off ⋮ → Full screen in the car.");
+        para(col, "Back is the app's own Back. Apps goes to the apps grid. Close closes the app, like swiping it away in Recents. Hide gives the app the whole width; Android Auto's round bar button at the top of the car screen brings the bar back.");
+        para(col, "That bar button is Android Auto's own: it floats over the app until it hides, and a tap on the screen shows it again. Beside a media card (Android Auto's split screen) the app also fills the band under that button. To keep it out of the app's way, turn off ⋮ → Full screen in the car.");
 
         heading(col, "Cars without a touch screen");
         para(col, "With a rotary knob or a touchpad, select Android Auto's pan button (✥) at the bottom right and press: a ring, AnyAuto's pointer, appears. Push the knob to move it; quick pushes go further. Press the knob to click where the ring is, and press the pan button again for the next click.");
